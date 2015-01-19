@@ -5,8 +5,14 @@ body {
 }
 
 div.jumbotron {
-  background-image: url("../image/jumbotron_background.png");
+  background-image: url("../../image/jumbotron_background.png");
   background-size: 100%;
   color: #ffffff;
   padding: 96px 0;
+  
+  h1 {
+    font-weight: 900;
+    font-size: 72px;
+    text-shadow: 4px 4px 8px #000000;
+  }
 }

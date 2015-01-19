@@ -1,0 +1,14 @@
+/* Move down content because we have a fixed navbar that is 50px tall */
+body {
+  padding-top: 50px;
+  padding-bottom: 20px; }
+
+div.jumbotron {
+  background-image: url("../../image/jumbotron_background.png");
+  background-size: 100%;
+  color: #ffffff;
+  padding: 96px 0; }
+  div.jumbotron h1 {
+    font-weight: 900;
+    font-size: 72px;
+    text-shadow: 4px 4px 8px #000000; }
