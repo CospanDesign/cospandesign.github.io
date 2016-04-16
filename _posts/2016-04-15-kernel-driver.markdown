@@ -11,6 +11,10 @@ I have worked on a few kernel drivers before and every time I spend a couple of 
 
 There are a lot of different types of modules to build, this one is aimed at presenting a file interface for a hardware device. Basically it allows userland access to your device using both file operations and sysfs. There are a lot of other ways to build modules. Perhaps in the future the git repo can be branched to accomodate these variations.
 
+A high level view of the system:
+
+![Driver and Userland]({{ site.baseurl }}/assets/image/posts/kernel-module/kernelmodule_driver.png)
+
 This guide will walk through:
 
   * **Setup** The initial setup when building a module include preparing the host and downloading the code.
@@ -67,18 +71,87 @@ A newer approach to controlling devices, drivers and general system functionalit
 
 A driver can be broken down into four regions.
 
-  * Hardware Detection and Removal handlers.
-  * Driver Setup and Tear Down.
+  * Module Initialization/Remove.
+  * Per Device Identification, Initialization and Removal.
   * User Interface.
   * General Driver Infrastructure.
 
-### Hardware Detection and Removal
+### Kernel Module Installation and Removal
 
-When a driver is loaded into the kernel it needs to tell the kernel how to identify the device the driver will control. Depending on the driver you will write some other piece of code will 
+When a driver is loaded and removed the kernel uses the 'module_init' and 'module_exit' macros to identify which functions should be called. driver developers can assign a specific function as follows:
+
+{% highlight c %}
+static int wallaby_init(void)
+{
+}
+
+static int wallaby_exit(void)
+{
+}
+
+module_init ("wallaby_init");
+modue_exit ("wallaby_exit");
+
+{% endhighlight %}
+
+The responsibility of these two functions are as follows:
+
+  * **init**
+    * Perform one time configuration for the driver.
+    * Describe how the kernel can identify the device.
+
+  * **exit**
+    * Remove and cleanup any resources the driver declared.
+
+  
+### Per Device Probe/Disconnect
+
+Identifying the hardware device is protocol dependent, some drivers can have devices installed and disconnect while the system is online. (Example: Adding or removing a USB Device)
+
+For USB drivers, because devices can be inserted and disconnect while the system is online then drivers need a way to tell the kernel how to identify the devices that they work. In terms of drivers they 'register' themselves with the kernel.
+
+_I like to think of the kernel managing a construction yard. A driver registers or tells the kernel that they can drive specific vehicles and can identify these vehicles using provided ID. If a vehicle matching any of the provided IDs the kernel will then notify the driver that there is a valid vehicle by calling the drivers 'probe' funcition. Similarly if the vehicle is disconnect the kernel will notify the driver by calling the 'disconnect' function_
+
+The 'probe' and 'disconnect' functions are not declared using a macro instead the driver usually declares these two functions in a protocol specific way. For example USB uses a structure called **usb\_driver** that is initialized when the module's 'init' function is called.
+
+The static structure is populated with usb specific functions a great reference to use is the 'usb-skeleton.c' driver found in kernel/driver/usb folder.
+
+In this module the usb\_driver structure looks like this:
+
+{% highlight c %}
+
+static int skel_probe(struct usb_interface *interface, const struct usb_device_id *id)
+{
+  return 0;
+}
+
+static void skel_disconnect(struct usb_interface *interface)
+{
+}
+
+static struct usb_driver skel_driver = {
+  .name =   "skeleton",
+  .probe =  skel_probe,
+  .disconnect = skel_disconnect,
+  .suspend =  skel_suspend,
+  .resume = skel_resume,
+  .pre_reset =  skel_pre_reset,
+  .post_reset = skel_post_reset,
+  .id_table = skel_table,
+  .supports_autosuspend = 1,
+};
+
+module_usb_driver(skel_driver);
+
+{% endhighlight %}
 
 
+XXX: Remove this comment, it's here to fix VIM's over zealous highlighting
+*/
 
+# file interface and sysfs
 
+Drivers perform the device specific functions that allow users to 
 
 # Code-Build-Debug-Repeat
 
