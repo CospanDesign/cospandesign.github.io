@@ -1,94 +1,23 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-    <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="">
-    <meta name="author" content="">
-    <link rel="icon" href="assets/image/logo_96x96.png">
+---
+layout: default
+---
 
-    <title>Cospan Design</title>
+<div class="home">
 
-    <!-- Bootstrap core CSS -->
-    <link href="http://getbootstrap.com/dist/css/bootstrap.min.css" rel="stylesheet">
+  <h1 class="page-heading">Posts</h1>
 
-    <!-- Custom styles for this page -->
-    <link href="assets/style/css/home.css" rel="stylesheet">
+  <ul class="post-list">
+    {% for post in site.posts %}
+      <li>
+        <span class="post-meta">{{ post.date | date: "%b %-d, %Y" }}</span>
 
-    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
-    <!--[if lt IE 9]>
-      <script src="https://oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js"></script>
-      <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
-    <![endif]-->
+        <h2>
+          <a class="post-link" href="{{ post.url | prepend: site.baseurl }}">{{ post.title }}</a>
+        </h2>
+      </li>
+    {% endfor %}
+  </ul>
 
-  <body>
+  <p class="rss-subscribe">subscribe <a href="{{ "/feed.xml" | prepend: site.baseurl }}">via RSS</a></p>
 
-    <nav class="navbar navbar-inverse navbar-fixed-top">
-      <div class="container">
-        <div class="navbar-header">
-          <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false" aria-controls="navbar">
-            <span class="sr-only">Toggle navigation</span>
-            <span class="icon-bar"></span>
-            <span class="icon-bar"></span>
-            <span class="icon-bar"></span>
-          </button>
-          <a class="navbar-brand"
-            href="http://cospandesign.github.io">Cospan Design</a>
-        </div>
-        <div id="navbar" class="navbar-collapse collapse">
-        </div><!--/.navbar-collapse -->
-      </div>
-    </nav>
-
-    <!-- Main jumbotron for a primary marketing message or call to action -->
-    <div class="jumbotron">
-      <div class="container">
-        <h1>Nysa</h1>
-        <h2>Nysa is an open-source platform that simplifies hardware and software development
-          with FPGAs.</h2>
-      </div>
-    </div>
-
-    <div class="container">
-      <h2>Speeds up FPGA-based project development.</h2>
-      <p>Nysa's software tools reduce the unnecessary complexities when building
-      and interfacing with FPGAs so that working with FPGAs does not hurt
-      anymore. By providing a structured approach, it simplifies the
-      deveopment workflow, opening up the powerful features of FPGAs to everyone.</p>
-      <div class="row">
-       <div class="col-md-4">
-         <h2>Built-in infrastructure</h2>
-         <p>Built-in standard interfaces for device communication so that you
-         can focus on developing your new devices instead of wasting time on
-         re-inventing the wheels.</p>
-       </div>
-        <div class="col-md-4">
-          <h2>Drag and drop UI</h2>
-          <p>Create FPGA images from visual configuration using drag and drop,
-            and then download them to a user FPGA. No knowledge of HDL
-            required!</p>
-       </div>
-        <div class="col-md-4">
-          <h2>Simple API</h2>
-          <p>Communicating with an FPGA using a simple Python API (read to
-            register, write to register, etc...)</p>
-        </div>
-     </div>
-
-      <hr>
-      <h2>Nysa hardware</h2>
-
-      <hr>
-      <footer>
-        <p>© Cospan Design 2015</p>
-      </footer>
-    </div> <!-- /container -->
-
-    <!-- Bootstrap core JavaScript
-    ================================================== -->
-    <!-- Placed at the end of the document so the pages load faster -->
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
-    <!-- IE10 viewport hack for Surface/desktop Windows 8 bug -->
-    <script src="./assets/js/ie10-viewport-bug-workaround.js"></script>
-  </body>
-</html>
+</div>
