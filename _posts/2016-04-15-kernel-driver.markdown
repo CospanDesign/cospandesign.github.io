@@ -103,7 +103,7 @@ The responsibility of these two functions are as follows:
   * **exit**
     * Remove and cleanup any resources the driver declared.
 
-  
+
 ### Per Device Probe/Disconnect
 
 Identifying the hardware device is protocol dependent, some drivers can have devices installed and disconnect while the system is online. (Example: Adding or removing a USB Device)
@@ -149,9 +149,135 @@ module_usb_driver(skel_driver);
 XXX: Remove this comment, it's here to fix VIM's over zealous highlighting
 */
 
-# file interface and sysfs
+# Interfacing with your driver
 
-Drivers perform the device specific functions that allow users to 
+From the kernel's point of view the driver presents a _recognized interface_ to a device. From the device's point of view the driver translates the generic requests such as 'read' and 'write' to a device specific _native language_.
+
+The term _recognized interface_ can mean many different things. One interpretation can mean a file like interface. Where the driver enables the user to interact the device in the same way they would interact with a file. Files allow the user to 'read' and 'write', some allow you to 'seek'. Most programming languages understand how to interact with a file so presenting your driver as a file allows users to interface with the device in an easy to use way.
+
+Drivers do not need to interface with the user directly, instead the kernel may attach the driver to another module. As an example a USB camera may not interface with the user directly through a file but instead interface with a 'video4linux' module that transates data from the driver to the video subsystem.
+
+
+## File Interface
+
+We will use a file interface to communicate with the driver. As stated above most programming languages understand how to interact with a file. One issue with file interface is out of band signals or signals that are not specifically for reading and writing to a device may not be easy to do. We'll use sysfs in a later section. For now we'll talk about how to implement the file operations.
+
+File oeprations is accomplished by:
+
+  * Declaring a file\_operation structure that points to appropriate signals.
+  * Instantiated an 'inode' or a file like entry into the /dev directory.
+
+
+### Declaring a 'file\_operation' Structure
+
+Inside the driver we'll include the file operation structure and populate it with functions that satisfy the required functionality.
+
+
+{% highlight c++ %}
+//-----------------------------------------------------------------------------
+// File Operations
+//-----------------------------------------------------------------------------
+
+int wallaby_open(struct inode *inode, struct file *filp)
+{
+  return SUCCESS;
+}
+
+int wallaby_release(struct indoe *inode, struct file *filp)
+{
+  return SUCCESS;
+}
+
+ssize_t wallaby_write(struct file *filp, const char *buf, size_t count, loff_t = SUCCESS)
+{
+  return 0;
+}
+
+ssize_t wallaby_read(struct file *filp, char * buf, size_t count, loff_t *f_pos)
+{
+  return 0;
+}
+
+
+struct file_operations nysa_pcie_fops = {
+  owner:    THIS_MODULE,
+  read:     wallaby_read,
+  write:    wallaby_write,
+  open:     wallaby_open,
+  release:  wallaby_release
+}
+{% endhighlight %}
+
+
+There are more file operations to use but these are the minimum (I could tell). If you would like to implement more of the file\operations you can look them up here:
+
+[File Operations Header](http://lxr.free-electrons.com/source/include/linux/fs.h)
+
+### Declaring sysfs interface
+
+As discussed above sysfs is the modern place where out of band signals can be implemented. Because sysfs exposes named interfaces users can more easily determine what the different signals mean.
+
+There is a much better explanation of sysfs here:
+
+[sysfs](https://www.kernel.org/pub/linux/kernel/people/mochel/doc/papers/ols-2005/mochel.pdf)
+
+For brevity I'll only give a quick example of how to read and write values to/from the driver:
+
+First create an attribute structure:
+
+
+{% highlight c++ %}
+
+const char wallaby_name[] = "attr1";
+
+ssize_t show_wallaby_attr1 (struct device *dev, const char * buf){
+  printk("User show: %s\n", wallaby_name);
+  buf = wallaby_name;
+  return 0;
+}
+
+ssize_t store_wallaby_attr1 (struct device * dev, char * buf, size_t count){
+  struct attribute* wallaby_attr = dev->user->attr1;
+  printk("User set: %s\n", buf);
+  return 0;
+}
+
+
+/* Start Create */
+
+int retval = 0;
+//Create
+struct attribute* wallaby_attr = (*struct attribute) kmalloc(sizeof(struct attribute));
+struct device_attribute *wallaby_dev_attr = (*struct device_attribue) kmalloc(sizeof(struct device_attribute));
+
+wallaby_attr->name = &wallaby_name;
+wallaby_attr->owner = THIS_MODULE;
+wallaby_attr->mode = 666; //Read and write
+
+wallaby_dev_attr->attr = wallaby_attr;
+
+retval = sysfs_create_file(/*Object */, &wallaby_dev_attr);
+if (retval) {
+  printk ("Failed to create sysfs file for attrubute: %s\n", wallaby_name);
+}
+
+/* End Create */
+
+
+/* Start Tear Down */
+
+//Tear down
+sysfs_remove_file(/*Object*/, &wallaby_dev_attr);
+
+/* End Tear Down */
+
+{% endhighlight %}
+
+
+
+
+
+
 
 # Code-Build-Debug-Repeat
 
