@@ -116,9 +116,14 @@ The 'probe' and 'disconnect' functions are not declared using a macro instead th
 
 The static structure is populated with usb specific functions a great reference to use is the 'usb-skeleton.c' driver found in kernel/driver/usb folder.
 
+
+#### USB Device
+
 In this module the usb\_driver structure looks like this:
 
 {% highlight c %}
+
+#define MODNAME "skeleton"
 
 static int skel_probe(struct usb_interface *interface, const struct usb_device_id *id)
 {
@@ -130,7 +135,7 @@ static void skel_disconnect(struct usb_interface *interface)
 }
 
 static struct usb_driver skel_driver = {
-  .name =   "skeleton",
+  .name =   MODNAME,
   .probe =  skel_probe,
   .disconnect = skel_disconnect,
   .suspend =  skel_suspend,
@@ -142,6 +147,32 @@ static struct usb_driver skel_driver = {
 };
 
 module_usb_driver(skel_driver);
+
+{% endhighlight %}
+
+
+#### PCIE Device
+
+
+{% highlight c %}
+
+#define MODNAME "skeleton"
+
+static int skel_probe(struct pci_dev *pdev, const struct pci_device_id *id)
+{
+  return 0;
+}
+
+static void pcidriver_remove(struct pci_dev *pdev)
+{
+}
+
+static struct pci_driver skel_driver = {
+  .name = MODNAME,
+  .id_table = skel_ids,
+  .probe = skel_probe,
+  .remove = skel_remove,
+};
 
 {% endhighlight %}
 
