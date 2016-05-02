@@ -89,22 +89,24 @@ Most of the design is what you thing, there are seperate write side and read sid
 As an example of a simple module that writes an incremeting number pattern to a PPFIFO
 
 {% highlight verilog %}
-/* Module: ppfifo_data_generator
+/* Module: ppfifo_source
  *
  * Description: Populate a Ping Pong FIFO with an incrementing number pattern
  */
 
-module ppfifo_data_generator (
-  input               clk,
-  input               rst,
-  input               i_enable,
+module ppfifo_source #(
+  parameter                       DATA_WIDTH    = 8
+)(
+  input                           clk,
+  input                           rst,
+  input                           i_enable,
 
   //Ping Pong FIFO Interface
-  input       [1:0]   i_wr_rdy,
-  output  reg [1:0]   o_wr_act,
-  input       [23:0]  i_wr_size,
-  output  reg         o_wr_stb,
-  output  reg [31:0]  o_wr_data
+  input       [1:0]               i_wr_rdy,
+  output  reg [1:0]               o_wr_act,
+  input       [23:0]              i_wr_size,
+  output  reg                     o_wr_stb,
+  output  reg [DATA_WIDTH - 1:0]  o_wr_data
 );
 
 //Local Parameters
@@ -114,6 +116,9 @@ reg   [23:0]          r_count;
 //Asynchronous Logic
 //Synchronous Logic
 always @ (posedge clk) begin
+  //De-assert Strobes
+  o_wr_stb          <= 0;
+
   if (rst) begin
     o_wr_act        <=  0;
     o_wr_stb        <=  0;
@@ -121,8 +126,6 @@ always @ (posedge clk) begin
     r_count         <=  0;
   end
   else begin
-    //Reset strobe signals
-    o_wr_stb        <= 0;
     if (i_enable) begin
       if ((i_wr_rdy > 0) && (o_wr_act == 0))begin
         r_count     <=  0;
@@ -135,7 +138,7 @@ always @ (posedge clk) begin
           o_wr_act[1]  <=  1;
         end
       end
-      else begin
+      else if (o_wr_act > 0) begin
         if (r_count < i_wr_size) begin
           //More room left in the buffer
           r_count   <=  r_count + 1;
@@ -171,22 +174,23 @@ Here are more specific details
 
 
 {% highlight verilog %}
-
 /* Module: ppfifo_data_sink
  *
  * Description: Whenever data is available within the FIFO activate it and read it all
  */
 
-module ppfifo_data_sink (
-  input               clk,
-  input               rst,
+module ppfifo_sink #(
+  parameter                       DATA_WIDTH    = 8
+)(
+  input                           clk,
+  input                           rst,
 
   //Ping Pong FIFO Interface
-  input               i_rd_rdy,
-  output  reg         o_rd_act,
-  input       [23:0]  i_rd_size,
-  output  reg         o_rd_stb,
-  input       [31:0]  i_rd_data
+  input                           i_rd_rdy,
+  output  reg                     o_rd_act,
+  input       [23:0]              i_rd_size,
+  output  reg                     o_rd_stb,
+  input       [DATA_WIDTH - 1:0]  i_rd_data
 );
 
 //Local Parameters
@@ -196,19 +200,20 @@ reg   [23:0]          r_count;
 //Asynchronous Logic
 //Synchronous Logic
 always @ (posedge clk) begin
+  //De-Assert Strobes
+  o_rd_stb            <=  0;
+
   if (rst) begin
     o_rd_act          <=  0;
     r_count           <=  0;
     o_rd_stb          <=  0;
   end
   else begin
-    //Strobes
-    o_rd_stb          <=  0;
     if (i_rd_rdy && !o_rd_act) begin
       r_count         <=  0;
       o_rd_act        <=  1;
     end
-    else begin
+    else if (o_rd_act) begin
       if (r_count < i_rd_size) begin
         o_rd_stb      <=  1;
         r_count       <=  r_count + 1;
@@ -219,9 +224,7 @@ always @ (posedge clk) begin
     end
   end
 end
-
 endmodule
-
 {% endhighlight %}
 
 
