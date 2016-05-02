@@ -233,7 +233,7 @@ I've made a simple test module to demonstrate the Ping Pong FIFO. If your inters
 
 Or to just download the repository you can find it here:
 
-https://github.com/CospanDesign/verilog_ppfifo_demo/archive/master.zip
+[Download](https://github.com/CospanDesign/verilog_ppfifo_demo/archive/master.zip)
 
 
 Here are a few shots of a simple simulation:
