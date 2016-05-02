@@ -1,0 +1,263 @@
+---
+layout: post
+title:  "Ping Pong FIFO"
+date:   2016-04-15 10:00:00 -0400
+categories: FPGA,FIFO
+---
+
+# Intro
+
+Innevitably whenever working in a complex FPGA design it's required to send data between modules. The defacto mechanism to accomplish this is a FIFO. Early on in Nysa I was working on modules where I would constantly employ a FIFO but I kept noticing a couple things that were frustrating:
+
+## FIFOs
+
+  * Writing: When writing to a FIFO you need to make sure you don't write so much data that the FIFO overflows. To help with this FIFOs usually have a **full flag** a **count** and sometime a **watermark** port.
+    * **watermark**: Essentially tells you when the FIFO has more than a certain number of items within and you should either slow down or not put data in. Which is good but if you want to send a specific amount of data you will need to add extra steps in your state machine to manage the 'above watermark' case. When working on a state machine this is frustrating because you may need to add states and registers to manage edge cases.
+    * **full flag**: This can be tricky because it's possible that the full flag will go high the same clock you attempt to put in data. If you have a pipelined design you will need to buffer this data when you detect the 'full' status.
+    * **count**: Counts can give you a snapshot of how much data can go into the FIFO. These are updated slower than both the watermark and full flag and will give you a conservative space count inside the FIFO. I feel tempted to use this a lot but I find that I need to add a few states into the state machine to manage this.
+
+  * Reading: Reading from a FIFO can is usually not as bad as long as you don't read when the **empty flag** is set everything works fine
+
+## Double Buffer
+
+My father got me thinking about using a dual port block ram as a double buffer. Just like the FIFO there is a reader and writer with the following behaviors
+
+  * Writer: write data into the block ram and then using [clock crossing techniques](http://www.fpga4fun.com/CrossClockDomain.html) send the size and status of the data to the reader.
+  * Reader: read the known amount of data the writer put into the RAM.
+
+The great thing about this approach is that the writer knows how much space it can write to and the reader knows how much data it can read. This fits very well into a pipelined design. The other aspect about this is that the writer can start working on the second half of the block RAM while the reader is reading the data out. This approach doesn't come for free though. Here are some of the things that now need to be managed by the reader and writer:
+
+  * Writer
+    * How much space is in the buffer (or half of the buffer)
+    * Start/End address pointer
+    * How much data was written
+  * Reader
+    * How much data is available to read
+    * Start/End address pointer
+
+
+I loved the foreknowledge of the amount of data the double buffer gave me. This allowed me to write cores that simply dumped a known amount of data from the output of the double buffer to another location like an audio or video buffer. Unfortunately every module that used the double buffer had to be designed to work with all these the above issues as well as a few more cross clock domain flags.
+
+If you didn't need to worry about the edge cases of a FIFO (Full/Empty) it would be the easiest mechanism to use. I decided to combine these two mechanism.
+
+
+# Ping Pong FIFO
+
+The Ping Pong FIFO essentially is a double buffer described above wrapped up to look like a FIFO. All the address pointers and cross clock domain communication is wrapped up inside a simple module. The module interface looks like this:
+
+{% highlight verilog %}
+module PPFIFO
+#(parameter     DATA_WIDTH    = 8,
+                ADDRESS_WIDTH = 4
+)(
+
+  //universal input
+  input                             reset,
+
+  //write side
+  input                             write_clock,
+  output reg  [1:0]                 write_ready,
+  input       [1:0]                 write_activate,
+  output      [23:0]                write_fifo_size,
+  input                             write_strobe,
+  input       [DATA_WIDTH - 1: 0]   write_data,
+  output                            starved,
+
+  //read side
+  input                             read_clock,
+  input                             read_strobe,
+  output reg                        read_ready,
+  input                             read_activate,
+  output reg  [23:0]                read_count,
+  output      [DATA_WIDTH - 1: 0]   read_data,
+
+  output                            inactive
+);
+
+
+{% endhighlight %}
+
+Most of the design is what you thing, there are seperate write side and read side clocks, the strobes are used to write and read data. There are some new signals though.
+
+  * **write\_ready**: This is related to the double buffer, where there are two sides of the buffer you need to manage. The two bits tell you which side of the double buffer is ready.
+    * 0: lower half of the buffer is ready
+    * 1: upper half is ready
+  * **write\_activate**: Users tell the PPFIFO that it wants to own one side of the buffer
+  * **write\_fifo\_size**: Indicates the number of words the user can write to the PPFIFO.
+    * **NOTE: You do not need to fill up the write side before finishing, the PPFIFO will keep track of the number of elements written and send this information to the read side**
+
+As an example of a simple module that writes an incremeting number pattern to a PPFIFO
+
+{% highlight verilog %}
+/* Module: ppfifo_data_generator
+ *
+ * Description: Populate a Ping Pong FIFO with an incrementing number pattern
+ */
+
+module ppfifo_data_generator (
+  input               clk,
+  input               rst,
+  input               i_enable,
+
+  //Ping Pong FIFO Interface
+  input       [1:0]   i_wr_rdy,
+  output  reg [1:0]   o_wr_act,
+  input       [23:0]  i_wr_size,
+  output  reg         o_wr_stb,
+  output  reg [31:0]  o_wr_data
+);
+
+//Local Parameters
+//Registers/Wires
+reg   [23:0]          r_count;
+//Submodules
+//Asynchronous Logic
+//Synchronous Logic
+always @ (posedge clk) begin
+  if (rst) begin
+    o_wr_act        <=  0;
+    o_wr_stb        <=  0;
+    o_wr_data       <=  0;
+    r_count         <=  0;
+  end
+  else begin
+    //Reset strobe signals
+    o_wr_stb        <= 0;
+    if (i_enable) begin
+      if ((i_wr_rdy > 0) && (o_wr_act == 0))begin
+        r_count     <=  0;
+        if (i_wr_rdy[0]) begin
+          //Channel 0 is open
+          o_wr_act[0]  <=  1;
+        end
+        else begin
+          //Channel 1 is open
+          o_wr_act[1]  <=  1;
+        end
+      end
+      else begin
+        if (r_count < i_wr_size) begin
+          //More room left in the buffer
+          r_count   <=  r_count + 1;
+          o_wr_stb  <=  1;
+          //put the count in the data
+          o_wr_data <=  r_count;
+        end
+        else begin
+          //Filled up the buffer, release it
+          o_wr_act  <=  0;
+        end
+      end
+    end
+  end
+end
+
+endmodule
+{% endhighlight %}
+
+
+As you can see with the addition of one extra register to keep track of how much data you add to the PPFIFO you don't have to worry about full flags, water marks or counts.
+
+
+The read side is even easier. The PPFIFO knows which buffer was written to first so the user only needs to watch the one ```read_ready``` flag and then use the ```read_activate``` to tell it you have control. Here is an example of reading data from a PPFIFO:
+
+Here are more specific details
+
+  * the user monitors the 'read_ready' bit: When the 'read_ready' signal is 1 then the ppfifo has a block of data ready for the user.
+  * The user activates that block with 'read_activate' signal and uses the 'read_strobe' to read the NEXT data
+  * 'read_count' is the total number of data elements within the buffer.
+  * Users must read all the data before setting 'read_activate' low
+
+
+
+{% highlight verilog %}
+
+/* Module: ppfifo_data_sink
+ *
+ * Description: Whenever data is available within the FIFO activate it and read it all
+ */
+
+module ppfifo_data_sink (
+  input               clk,
+  input               rst,
+
+  //Ping Pong FIFO Interface
+  input               i_rd_rdy,
+  output  reg         o_rd_act,
+  input       [23:0]  i_rd_size,
+  output  reg         o_rd_stb,
+  input       [31:0]  i_rd_data
+);
+
+//Local Parameters
+//Registers/Wires
+reg   [23:0]          r_count;
+//Submodules
+//Asynchronous Logic
+//Synchronous Logic
+always @ (posedge clk) begin
+  if (rst) begin
+    o_rd_act          <=  0;
+    r_count           <=  0;
+    o_rd_stb          <=  0;
+  end
+  else begin
+    //Strobes
+    o_rd_stb          <=  0;
+    if (i_rd_rdy && !o_rd_act) begin
+      r_count         <=  0;
+      o_rd_act        <=  1;
+    end
+    else begin
+      if (r_count < i_rd_size) begin
+        o_rd_stb      <=  1;
+        r_count       <=  r_count + 1;
+      end
+      else begin
+        o_rd_act      <=  0;
+      end
+    end
+  end
+end
+
+endmodule
+
+{% endhighlight %}
+
+
+I've made a simple test module to demonstrate the Ping Pong FIFO. If your intersted the git repo is here:
+[PPFIFO Demo Repo](https://github.com/CospanDesign/verilog_ppfifo_demo)
+
+Or to just download the repository you can find it here:
+
+https://github.com/CospanDesign/verilog_ppfifo_demo/archive/master.zip
+
+
+Here are a few shots of a simple simulation:
+
+![High Level Simulation]({{ site.baseurl }}/assets/image/posts/ppfifo/high_level_simulation.png)
+
+
+Zoomed in at the beginning of a read transaction and the beginning of the next write transaction
+
+![Zoomed in at beginning]({{ site.baseurl }}/assets/image/posts/ppfifo/zoomed_in_beginning.png)
+
+Zoomed in between read transactions
+
+![Zoomed in at beginning]({{ site.baseurl }}/assets/image/posts/ppfifo/zoomed_in_between.png)
+
+Semi Zoomed in
+
+![Zoomed in at beginning]({{ site.baseurl }}/assets/image/posts/ppfifo/zoomed_semi_zoomed.png)
+
+
+
+
+
+
+
+
+
+
+
+
