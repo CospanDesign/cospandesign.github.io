@@ -9,11 +9,13 @@ categories: Linux,Kernel,Driver
 
 I have worked on a few kernel drivers before and every time I spend a couple of days setting up the build environment and figuring out how to do everything again. This is my attempt at helping myself out in the future. So to future Dave, you owe me a beer.
 
-There are a lot of different types of modules to build, this one is aimed at presenting a file interface for a hardware device. Basically it allows userland access to your device using both file operations and sysfs. There are a lot of other ways to build modules. Perhaps in the future the git repo can be branched to accomodate these variations.
+A kernel module is a binary that can be loaded into the kernel at runtime and extends the kernel's functionality. A driver is a specific type of kernel module with the intended purpose of bridging a device to some subsystem in the kernel. This subsystem can be a file like interface, video output or audio. An example would be a PCIE card that has an HDMI port, the driver must translate the raw video output to format the is understood by the PCIE device.
 
-A high level view of the system:
+There are a lot of different types of drivers, this article is aimed at creating one with a file interface for a hardware device. Basically it facilitates userland access with a device using both file operations and sysfs. Because most programming language have some mechanism of interacting with files a file interface is very powerful and easiest to use. There are a lot of other types of drivers and, perhaps in the future, the git repo can be branched to accomodate these variants.
 
-![Driver and Userland]({{ site.baseurl }}/assets/image/posts/kernel-module/kernelmodule_driver.png)
+A high level view of how the kernel, driver, device and user applications interact with each other:
+
+![Driver and Userland]({{ site.baseurl }}/assets/image/posts/kernel-module/kernel_module_driver.png)
 
 This guide will walk through:
 
@@ -58,16 +60,7 @@ git clone https://github.com/CospanDesign/kernel-module.git wallaby
 
 There is a script that needs to be run one time that will rename the modules and all references to that module. It should probably be deleted after it's use or you may inadvertently rename things later on.
 
-# Design
-
-## ioctrl vs sysfs
-As stated in the intro this is one type of driver focused on presenting a file like interface to a hardware device. File interfaces are useful becaues most programming languages can interact with files. There is one issue. Sometimes we need to interact with our hardware in a way that doesn't make sense using 'read' or 'write'. For example in order to configure a UART to operate at a specific baudrate users would need to use 'out of band' signals called 'Input Output Control' or ioctrl.
-
-If you have ever used ioctl you can appreciate that it was frustrating to say the least. The main reason for this is because the user needed to know what specific ioctl corresponded to what function as well as what values were valid. The problem was exhaserbated by the fact that an ioctl for one driver could be completely different foa another driver. As can be imagined there were great attempts to figure this issue out with 'known ioctl numbers' as well as other such mechanisms.
-
-A newer approach to controlling devices, drivers and general system functionality was introduced with sysfs. There are a lot of resources on the web describing the history and benefits but suffice to say we will be using sysfs to configure our device.
-
-## Anatomy of a driver
+# Design: Anatomy of a driver
 
 A driver can be broken down into four regions.
 
@@ -76,9 +69,17 @@ A driver can be broken down into four regions.
   * User Interface.
   * General Driver Infrastructure.
 
+## ioctrl vs sysfs
+
+As stated in the intro this is one type of driver focused on presenting a file like interface to a hardware device. File interfaces are useful becaues most programming languages can interact with files. There is one issue. Sometimes we need to interact with our hardware in a way that doesn't make sense using the stnadard file operations like 'read' or 'write'. For example in order to configure a UART to operate at a specific baudrate users would need to use 'out of band' signals that communicate with the device outside of the standard data flow.
+
+'out of band' signaling has changed from ioctl to sysfs. If you have ever used ioctl you can appreciate that it was frustrating to say the least. The main reason for this is because, if you wish to use and 'out of band' signal. the user needed to know what specific ioctl corresponded to what function as well as what values to read/write were valid. The problem was exhaserbated by the fact that an ioctl for one driver could be completely different for another driver. As can be imagined there were great attempts to find an elegant solution using things like [known ioctl numbers](https://github.com/torvalds/linux/blob/master/Documentation/ioctl/ioctl-number.txt).
+
+A newer approach to controlling devices, drivers and general system functionality was introduced with sysfs. There are a lot of resources on the web describing the history and benefits of sysfs including [this great paper](https://www.kernel.org/pub/linux/kernel/people/mochel/doc/papers/ols-2005/mochel.pdf) but suffice to say we will be using sysfs to configure our device.
+
 ### Kernel Module Installation and Removal
 
-When a driver is loaded and removed the kernel uses the 'module_init' and 'module_exit' macros to identify which functions should be called. driver developers can assign a specific function as follows:
+When a driver is loaded and removed the kernel uses the 'module\_init' and 'module\_exit' macros to identify which functions should be called. driver developers can assign a specific function as follows:
 
 {% highlight c %}
 static int wallaby_init(void)
@@ -99,27 +100,30 @@ The responsibility of these two functions are as follows:
   * **init**
     * Perform one time configuration for the driver.
     * Describe how the kernel can identify the device.
+    * Request character device region.
 
   * **exit**
     * Remove and cleanup any resources the driver declared.
+    * Release the character device region
 
 
-### Per Device Probe/Disconnect
+### Recognizing a Device
 
-Identifying the hardware device is protocol dependent, some drivers can have devices installed and disconnect while the system is online. (Example: Adding or removing a USB Device)
+A driver can be installed but it may not do anything until an associated hardware device is connected to the computer. The driver needs to tell the kernel how to recognized the device. Recognizing a device is dependent on protocol.
 
-For USB drivers, because devices can be inserted and disconnect while the system is online then drivers need a way to tell the kernel how to identify the devices that they work. In terms of drivers they 'register' themselves with the kernel.
+For example, all USB devices contain a descriptor that the host computer can read. This descriptor contains, among other things, two identification numbers:
 
-_I like to think of the kernel managing a construction yard. A driver registers or tells the kernel that they can drive specific vehicles and can identify these vehicles using provided ID. If a vehicle matching any of the provided IDs the kernel will then notify the driver that there is a valid vehicle by calling the drivers 'probe' funcition. Similarly if the vehicle is disconnect the kernel will notify the driver by calling the 'disconnect' function_
+  * Vendor ID: A 16-bit unique vendor identification number.
+  * Product ID: A 16-bit unique ID that distinguish one vendor product from another.
 
-The 'probe' and 'disconnect' functions are not declared using a macro instead the driver usually declares these two functions in a protocol specific way. For example USB uses a structure called **usb\_driver** that is initialized when the module's 'init' function is called.
+The kernel contains infrastructure to detect vendor and product IDs. This makes the process of identifying drivers much easier. The module must register the IDs of interest to the kernel. When the kernel detects these IDs the kernel will call the modules 'probe' function. When the device is removed the kernel will also call the 'disconnect' function.
 
-The static structure is populated with usb specific functions a great reference to use is the 'usb-skeleton.c' driver found in kernel/driver/usb folder.
+_I like to think of the kernel managing a construction yard. A driver registers or tells the kernel that they can drive specific vehicles and can identify these vehicles using provided ID. If a vehicle matching any of the provided IDs are found the kernel will then notify the driver that there is a valid vehicle by calling the drivers 'probe' funcition. Similarly if the vehicle is disconnect the kernel will notify the driver by calling the 'disconnect' function_
 
+The 'probe' and 'disconnect' functions are not declared using a macro instead the driver usually declares these two functions in a protocol specific way. For example, USB uses a structure called **usb\_driver** that is populated by the driver author and may be augmented by the module's 'init' function.
 
-#### USB Device
+The structure is populated with usb specific functions. a great reference to use is the 'usb-skeleton.c' driver found in kernel/driver/usb folder. Here is an excerpt showing the 'static struct usb\_driver' and the 'probe' and 'disconnect' functions that are called when a recognized device is inserted and removed.
 
-In this module the usb\_driver structure looks like this:
 
 {% highlight c %}
 
@@ -127,6 +131,7 @@ In this module the usb\_driver structure looks like this:
 
 static int skel_probe(struct usb_interface *interface, const struct usb_device_id *id)
 {
+  //The kernel calls this function when the vendor and product IDs registered with the kernel are detected.
   return 0;
 }
 
@@ -151,8 +156,10 @@ module_usb_driver(skel_driver);
 {% endhighlight %}
 
 
-#### PCIE Device
+The full module can be found here: ['usb-skeleton.c](http://lxr.free-electrons.com/source/drivers/usb/usb-skeleton.c)
 
+
+Here is another example of the PCIE driver:
 
 {% highlight c %}
 
@@ -176,9 +183,68 @@ static struct pci_driver skel_driver = {
 
 {% endhighlight %}
 
+### Reserving space for character devices
 
-XXX: Remove this comment, it's here to fix VIM's over zealous highlighting
-*/
+Because we want to interact with our driver using a character devices files we need to ask the kernel to reserve some space for all the possible devices we will be using. Then, if a device is detected, we can associate a character device file with it. Because multiple devices can interface with a single module there needs to be a way to distinguish one device from another.
+
+In the past this was accomplished using strict major and minor number identification. As an example virtual consoles and serial terminals have a major number of '4' and when you wanted to declare a new unique tty device you used the major number '4' and took a minor number.
+
+You can view character devices in the /dev directory and see which major and minor number are currently in use.
+
+{% highlight bash %}
+
+cd /dev
+ls -l
+
+...
+#Excerpt
+crw--w----  1 root tty       4,   0 Apr 16 13:46 tty0
+crw-rw----  1 root tty       4,   1 Apr 19 07:16 tty1
+crw--w----  1 root tty       4,  10 Apr 16 13:46 tty10
+crw--w----  1 root tty       4,  11 Apr 16 13:46 tty11
+crw--w----  1 root tty       4,  12 Apr 16 13:46 tty12
+crw--w----  1 root tty       4,  13 Apr 16 13:46 tty13
+crw--w----  1 root tty       4,  14 Apr 16 13:46 tty14
+crw--w----  1 root tty       4,  15 Apr 16 13:46 tty15
+...
+{% endhighlight %}
+
+
+In modern drivers the module developer does not declare explicitly which major or minor number they want to use, instead the kernel will decide, In order to reserve some character device files of our own we would make our request within the init function.
+
+{% highlight c %}
+int alloc_chrdev_region(dev_t *dev, unsigned int firstminor, 
+                          unsigned int count, char *name);
+{% endhighlight %}
+
+Parameters:
+
+  * firstminor: first minor number you wish to use for the driver (Usually 0)
+  * count: The number of consecutive minor numbers you want
+  * name: The name of the driver
+  * dev: The first major/minor number generated.
+
+To remove the device file use this function:
+{% highlight c %}
+void unregister_chrdev_region(dev_t first, unsigned int count);
+{% endhighlight %}
+
+Parameters:
+
+  * first: The first major/minor number you received
+  * count: The number of consecutives device structures.
+
+
+### Class Instantiation
+
+In order to interface with the sysfs we need to instantiate a class
+
+
+## Per Device Probe/Disconnect
+
+Although there may be only one kernel module there may be multiple devices that can work with that driver. The probe function is called when a new, unique, device is attached. The distinction between driver and unique device instances is illustrated:
+
+![Per Device Instanciation]({{ site.baseurl }}/assets/image/posts/kernel-module/kernel_module_instantiation.png)
 
 # Interfacing with your driver
 
@@ -304,13 +370,14 @@ sysfs_remove_file(/*Object*/, &wallaby_dev_attr);
 
 {% endhighlight %}
 
-
-
-
-
-
-
 # Code-Build-Debug-Repeat
 
 Now that all the configuration is done it's time build and test your code
 
+
+
+# Acknowledgments
+
+I need to pay my respects to the various resources I used to write this post including:
+
+  * A nice kernel PCIE FPGA kernel module on github: [FPGA PCIE Driver](https://github.com/abyszuk/fpga_pcie_driver)
