@@ -104,9 +104,10 @@ Supply the correct tags to the PCIE egress
 ### Tests
 
 #### Host Tests
-  - [ ] `Host`: Write Register: Transmit a 32-bit Register value to `PCIE Ingress`
+  - [x] `Host`: Write Register: Transmit a 32-bit Register value to `PCIE Ingress`
     - Expected Result:
       - `Host` -> `PCIE Ingress` Send 32-bit value to a register
+    - Demonstrated using kernel driver and user application
   - [ ] `Host`: Send Read Command: Transmit a **Read Command**
     - Expected Result:
       - `Host` -> `PCIE Ingress` Send 32-bit **Read Command**
@@ -116,7 +117,7 @@ Supply the correct tags to the PCIE egress
       - `Host` repeats the above process until all of the data is read from the device
       - `Host` wait for final **Status Update** with **Done** flag asserted
       - `PCIE Egress` -> `Host` send Status Update the **Done** Flag will indicate the transaction is finished
-  - [ ] `Host`: Send Write Command: Transmit a **Write Command** to `PCIE Ingress`
+  - [x] `Host`: Send Write Command: Transmit a **Write Command** to `PCIE Ingress`
     - Expected Result:
       - `Host` -> `PCIE Ingress` Send 32-bit **Write Command**
       - `PCIE Ingress` Parse and notify `PCIE Control`
@@ -125,81 +126,148 @@ Supply the correct tags to the PCIE egress
       - `Host` repeats the above process until all of the data is sent to the device
       - `Host` waits for the Status Update with the **Done** flag asserted
       - `PCIE Egress` -> `Host` send Status Update the **Done** Flag will indicate the transaction is finished
+    - Demonstrated using kernel driver and user application
 
 
 #### PCIE Ingress Tests
 
-  - [ ] `PCIE Ingress`: Receive **Address Register**: `Host` sends an address to the `PCIE Ingress`
+  - [x] `PCIE Ingress`: Receive **Address Register**: `Host` sends an address to the `PCIE Ingress`
     - Expected Result:
       - `PCIE Ingress` parses **Memory Write** TLP and address is correctly written to the **Address Register**
-  - [ ] `PCIE Ingress`: Receive **Buffer Status**: `Host` sends a buffer status value to the `PCIE Ingress` indicating the status of the host side buffer
+    - Test 0
+  - [x] `PCIE Ingress`: Receive **Buffer Status**: `Host` sends a buffer status value to the `PCIE Ingress` indicating the status of the host side buffer
     - Expected Result:
       - `PCIE Ingress` parses **Memory Write** TLP and new data is correctly written to the **Buffer Status**
       - `PCIE Ingress` -> `Ingress Buffer Manager` within a write context the **Buffer Status Update** Signal is strobed
-  - [ ] `PCIE Ingress`: Receive **Memory Write Command**: `Host` sends a memory write command to initiate a memory write transaction
+    - Test 0
+  - [x] `PCIE Ingress`: Receive **Memory Write Command**: `Host` sends a memory write command to initiate a memory write transaction
     - Expected Result:
       - `PCIE Ingress` parses the **Memory Write** TLP and the data count is updated
       - `PCIE Ingress` -> `PCIE Control` strobes **Command Strobe**
-  - [ ] `PCIE Ingress`: Receive **Completion Packet**: `Host` sends a packet of data in response to a memory read request from the `PCIE Control`
+    - Test 6 Visually Observed Using GTKWave
+  - [x] `PCIE Ingress`: Receive **Completion Packet**: `Host` sends a packet of data in response to a memory read request from the `PCIE Control`
     - Expected Result:
       - `PCIE Ingress` parses the **Memory Write** TLP and the data count is updated
       - `PCIE Ingress` -> `PCIE Control` strobes **Command Strobe**
+    - Test 6 Visually Observed Using GTKWave
 
 #### PCIE Control (Write Context) Tests
 
-  - [ ] `PCIE Control`: Response to **Memory Write Command**: `PCIE Ingress` sends a **Memory Write Command** to `PCIE Control`
+  - [x] `PCIE Control`: Response to **Memory Write Command** (Short Packet): `PCIE Ingress` sends a **Memory Write Command** to `PCIE Control` using a short packet, not needing to switch between buffers or stressing `Credit Manager`
     - Expected Result:
-      - `PCIE Ingress` -> `PCIE Control` strobe **Command Strobe**
-      - `PCIE Control` enters the **Data Ingress Sub-State Machine**, specifically **Ingress Flow Control**
-      - `PCIE Control` determines there is more data to read and proceeds to **Wait for Tag** State
-      - `PCIE Control` waits for **Tag Ready** signal
-      - `Ingress Buffer Manager` -> `PCIE Control`: assert **Tag Ready**
-      - `PCIE Control` proceed to **Wait Flow Control**
-      - `Credit Manager` -> `PCIE Control` assert **Flow Control Ready**
-      - `PCIE Control` proceed to **Send Memory Request**
-      - `PCIE Control` -> `PCIE Egress` send a request for a packet of data associated with a tag
-      - `PCIE Control` update counts and register
-      - `PCIE Control` if full buffer has been read send a **Status Update**
-      - `PCIE Control` will proceed to **Ingress Flow Control**
-      - `PCIE Control` -> `PCIE Egress` If all of the data has been read from the host assert **Done** Signal and initiate a **Status Update**
+      - [x] `PCIE Ingress` -> `PCIE Control` strobe **Command Write Strobe**
+      - [x] `PCIE Control` enters the **Data Ingress Sub-State Machine**, specifically **Ingress Flow Control**
+      - [x] `PCIE Control` determines there is more data to read and proceeds to **Wait for Tag** State
+      - [x] `PCIE Control` waits for **Tag Ready** signal
+      - [x] `Ingress Buffer Manager` -> `PCIE Control`: assert **Tag Ready**
+      - [x] `PCIE Control` proceed to **Wait Flow Control**
+      - [x] `Credit Manager` -> `PCIE Control` assert **Flow Control Ready**
+      - [x] `PCIE Control` proceed to **Send Memory Request**
+      - [x] `PCIE Control` -> `PCIE Egress` send a request for a packet of data associated with a tag
+      - [x] `PCIE Control` update counts and register
+      - [x] `PCIE Control` if full buffer has been read send a **Status Update**
+      - [x] `PCIE Control` will proceed to **Ingress Flow Control**
+      - [x] `PCIE Control` -> `PCIE Egress` If all of the data has been read from the host assert **Done** Signal and initiate a **Status Update**
+    - Test 6 Visually Observed Using GTKWave
+  - [x] `PCIE Control`: Response to **Memory Write Command** (Medium Packet): `PCIE Ingress` sends a **Memory Write Command** to `PCIE Control`. `Ingress Buffer Manager` will need to manage a buffer that spans multple tags
+    - Expected Result:
+      - [x] `PCIE Ingress` -> `PCIE Control` strobe **Command Write Strobe**
+      - [x] `PCIE Control` enters the **Data Ingress Sub-State Machine**, specifically **Ingress Flow Control**
+      - [x] `PCIE Control` determines there is more data to read and proceeds to **Wait for Tag** State
+      - [x] `PCIE Control` waits for **Tag Ready** signal
+      - [x] `Ingress Buffer Manager` -> `PCIE Control`: assert **Tag Ready**
+      - [x] `PCIE Control` proceed to **Wait Flow Control**
+      - [x] `Credit Manager` -> `PCIE Control` assert **Flow Control Ready**
+      - [x] `PCIE Control` proceed to **Send Memory Request**
+      - [x] `PCIE Control` -> `PCIE Egress` send a request for a packet of data associated with a tag
+      - [x] `PCIE Control` update counts and register
+      - [x] `PCIE Control` if full buffer has been read send a **Status Update**
+      - [x] `PCIE Control` will proceed to **Ingress Flow Control**
+      - [x] `PCIE Control` -> `PCIE Egress` If all of the data has been read from the host assert **Done** Signal and initiate a **Status Update**
+    - Test 7 Visually Observed Using GTKWave
+  - [x] `PCIE Control`: Response to **Memory Write Command** (Long Packet): `PCIE Ingress` sends a **Memory Write Command** to `PCIE Control`. `Ingress Buffer Manager` will need to manage a buffer that spans 2 buffers
+    - Expected Result:
+      - [x] `PCIE Ingress` -> `PCIE Control` strobe **Command Write Strobe**
+      - [x] `PCIE Control` enters the **Data Ingress Sub-State Machine**, specifically **Ingress Flow Control**
+      - [x] `PCIE Control` determines there is more data to read and proceeds to **Wait for Tag** State
+      - [x] `PCIE Control` waits for **Tag Ready** signal
+      - [x] `Ingress Buffer Manager` -> `PCIE Control`: assert **Tag Ready**
+      - [x] `PCIE Control` proceed to **Wait Flow Control**
+      - [x] `Credit Manager` -> `PCIE Control` assert **Flow Control Ready**
+      - [x] `PCIE Control` proceed to **Send Memory Request**
+      - [x] `PCIE Control` -> `PCIE Egress` send a request for a packet of data associated with a tag
+      - [x] `PCIE Control` update counts and register
+      - [x] `PCIE Control` if full buffer has been read send a **Status Update**
+      - [x] `PCIE Control` will proceed to **Ingress Flow Control**
+      - [x] `PCIE Control` -> `PCIE Egress` If all of the data has been read from the host assert **Done** Signal and initiate a **Status Update**
+    - Test 8 Visually Observed Using GTKWave
+  - [x] `PCIE Control`: Response to **Memory Write Command** (Long Packet): `PCIE Ingress` sends a **Memory Write Command** to `PCIE Control`. `Ingress Buffer Manager` will need to manage a buffer that spans 3 buffers
+    - Expected Result:
+      - [x] `PCIE Ingress` -> `PCIE Control` strobe **Command Write Strobe**
+      - [x] `PCIE Control` enters the **Data Ingress Sub-State Machine**, specifically **Ingress Flow Control**
+      - [x] `PCIE Control` determines there is more data to read and proceeds to **Wait for Tag** State
+      - [x] `PCIE Control` waits for **Tag Ready** signal
+      - [x] `Ingress Buffer Manager` -> `PCIE Control`: assert **Tag Ready**
+      - [x] `PCIE Control` proceed to **Wait Flow Control**
+      - [x] `Credit Manager` -> `PCIE Control` assert **Flow Control Ready**
+      - [x] `PCIE Control` proceed to **Send Memory Request**
+      - [x] `PCIE Control` -> `PCIE Egress` send a request for a packet of data associated with a tag
+      - [x] `PCIE Control` update counts and register
+      - [x] `PCIE Control` if full buffer has been read send a **Status Update**
+      - [x] `PCIE Control` will proceed to **Ingress Flow Control**
+      - [x] `PCIE Control` -> `PCIE Egress` If all of the data has been read from the host assert **Done** Signal and initiate a **Status Update**
+    - Test 9 Visually Observed Using GTKWave
+
 
 #### PCIE Egress Tests
 
-  - [ ] `PCIE Egress`: Transmit Packet: When `PCIE Control` initiates a transaction the `PCIE Egress` will transmit all the data:
+  - [x] `PCIE Egress`: Transmit Packet: When `PCIE Control` initiates a transaction the `PCIE Egress` will transmit all the data:
     - Expected Result:
       - `PCIE Control` -> `PCIE Egress` Assert **Send Packet**
       - `PCIE Egress` send TLP packet to host
       - `PCIE Egress` -> `PCIE Control` Assert **Send Packet Finished**
       ` `PCIE Control` -> `PCIE Egress` De-assert **Send Packet**
       - `PCIE Egress` -> `PCIE Control` De-Assert **Send Packet Finished**
+    - Test 1
 
 #### Ingress Buffer Manager Tests
 
-  - [ ] `Ingress Buffer Manager` Enable: Initialize when `PCIE Control` assert **enable** signal
+  - [x] `Ingress Buffer Manager` Enable: Initialize when `PCIE Control` assert **enable** signal
     - Expected Result:
       - `PCIE Control` -> `Ingress Buffer Manager` assert **enable**
       - `Ingress Buffer Manager` Exits reset state and waits for **Buffer Status Update Strobe**
-  - [ ] `Ingress Buffer Manager` Prepares Buffer: When `Ingress Buffer Manager` receives a **Buffer Status Update Strobe** from `PCIE Ingress` it configures **Tag State Machine** and indicates **Tag Ready** to `PCIE Control`
+    - Test 6 Visually Observed Using GTKWave
+  - [x] `Ingress Buffer Manager` Prepares Buffer: When `Ingress Buffer Manager` receives a **Buffer Status Update Strobe** from `PCIE Ingress` it configures **Tag State Machine** and indicates **Tag Ready** to `PCIE Control`
     - Expected Result:
       - `PCIE Control` -> `Ingress Buffer Manager` assert **Buffer Status Update Strobe**
       - `Ingress Buffer Manager` will read in the **Buffer Status** register and initiate the appropriate **Tag State Machine**
       - `Ingress Buffer Manager` -> `PCIE Control` will assert **Tag Ready** when a single tag within the **Tag State Machine** is in the ready state
-  - [ ] `Ingress Buffer Manager` will generate the appropaite address: When `PCIE Ingress` receives a **Completion Packet** it generates the address that conforms to the tag. If the response to a tag is longer than the **Max Read Packet** `Ingress Buffer Manager` will update the appropriate address
+    - Test 6 Visually Observed Using GTKWave
+  - [x] `Ingress Buffer Manager` will generate the appropaite address: When `PCIE Ingress` receives a **Completion Packet** it generates the address that conforms to the tag. If the response to a tag is longer than the **Max Read Packet** `Ingress Buffer Manager` will update the appropriate address
     - Expected Result:
       - `PCIE Ingress` -> `Ingress Buffer Manager` tag value is updated when a new **Completion Packet** is detected
       - `Ingress Buffer Manager` generates an address associated with tag
       - `PCIE Ingress` -> `Ingress Buffer Manager` strobes **Completion Packet Finished** the `Ingress Buffer Manager` will update the count and address for that tag.
       - `Ingress Buffer manager` **Tag State Machine** Moves to finished status when all the data for a buffer is written to `Buffer Builder`
-  - [ ] `Ingress Buffer Manager` Initiate FIFO Write: If `Ingress Buffer Manager` detects the entire buffer has been written down to the `Buffer Builder` the `Ingress Buffer Manager` will tell the `Buffer Builder` to populate the **Ingress FIFO** with the 4096 word data
+    - Test 6 Visually Observed Using GTKWave
+  - [x] `Ingress Buffer Manager` Initiate FIFO Write: If `Ingress Buffer Manager` detects the entire buffer has been written down to the `Buffer Builder` the `Ingress Buffer Manager` will tell the `Buffer Builder` to populate the **Ingress FIFO** with the 4096 word data
     - Expected Result:
       - `Ingress Buffer Manager` will determine the amount of data that has been read from the host buffer and when the buffer is completely read it will signal the `Buffer Builder` to populate the **Ingress FIFO**
-  - [ ] `Ingress Buffer Manager` Update `PCIE Control` when data has been written to **Ingress FIFO**: After the **Ingress FIFO** has been populated the buffer is finished and the `Buffer Builder` will indicate this status to `Ingress Buffer Manager`. It should assert **Buffer Finished** to `PCIE Control`
+    - Test 6 Visually Observed Using GTKWave
+  - [x] `Ingress Buffer Manager` Update `PCIE Control` when data has been written to **Ingress FIFO**: After the **Ingress FIFO** has been populated the buffer is finished and the `Buffer Builder` will indicate this status to `Ingress Buffer Manager`. It should assert **Buffer Finished** to `PCIE Control`
     - Expected Result:
       - `Ingress Buffer Manager` -> `Buffer Builder` assert appropriate **Populate FIFO** Flag
       - `Buffer Builder` -> `Ingress Buffer Manager` assert appropriate **FIFO Finished** Flag indicating it has successfully finished writing data from the buffer to the FIFO
       - `Ingress Buffer Manager` -> `PCIE Control` assert appropriate **Buffer Finished** Flag indicating that all data from `Host` has successfully been written to the Device
       - `PCIE Control` -> `Ingress Buffer Manager` assert appropriate **Buffer Finished Ack** Flag indicating `PCIE Control` has received flag
       - `Ingress Buffer Manager` Resets the **tag state machine** and resets the appropriate buffer's status
+    - Test 6 Visually Observed Using GTKWave
+  - [ ] `Ingress Buffer Manager` Flow Control: Do not overflow the buffer
+    - Expected Result:
+      - `Ingress Buffer Manager` neither of the **Buffer Enable** channels are asserted. Enable associated **Buffer Enable**
+      - `Ingress Buffer Manager` a **Buffer Enable** channel is asserted. Wait for **Buffer Finish**
+      - `Buffer Builder` -> `Ingress Buffer Manager` assert **Buffer Finish**
+      - `Ingress Buffer Manager` Enable associated **Buffer Enable**
 
 #### Credit Manager Tests
 
@@ -220,10 +288,12 @@ Supply the correct tags to the PCIE egress
       - `Credit Manager` Increment the appropraite data available
 
 #### Buffer Builder Tests
-  - [ ] `Buffer Builder` Populate FIFO: Populate appropriate **Ingress FIFO** when the associated signal is asserted
+  - [x] `Buffer Builder` Populate FIFO: Populate appropriate **Ingress FIFO** when the associated signal is asserted
     - Expected Result:
       - `Ingress Buffer Manager` -> `Buffer Builder` Assert **PPFIFO Write Enable**
       - `Buffer Builder` Populate FIFO
       - `Buffer Builder` -> `Ingress Buffer Manager` Assert **PPFIFO Write Finished**
       - `Ingress Buffer Manager` -> `Buffer Builder` De-Assert **PPFIFO Write Enable**
       - `Buffer Builder` De-assert **PPFIFO Write Finished**
+    - Test 9 Visually Observed Using GTKWave
+
