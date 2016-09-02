@@ -5,10 +5,7 @@ date:   2016-04-11 09:29:59 -0400
 categories: Linux
 ---
 
-
-# Intro
-
-The NVIDIA TX1 module is an awesome piece of hardware. In the past I've designed a couple of boards with SOCs (System on a Chip) including an NVIDIA Tegra 2 and an OMAP4. Both of them were expensive and required a couple of spins to fix small errors. The TX1, on the other hand, enables designers to interface with the module using only one large connector.
+The NVIDIA TX1 module is an awesome piece of hardware. In the past I've designed a couple of boards with SOCs (System on a Chip) including an NVIDIA Tegra 2 and an OMAP4. Both of them were expensive and required a couple of spins to fix small errors. The TX1, on the other hand, simplified the design process by both reducing the SOC interface to one connector and one wide range input voltage range.
 
 The software is another story. Bringing up Linux on a new platform is challenging. It's a different process for different chips and, on top of that, the process is still evolving.
 
@@ -18,7 +15,7 @@ Essentially the the path from 'power on' to CLI involves a lot of disjointed ste
 
   * [Tegra Boot Overview](http://http.download.nvidia.com/tegra-public-appnotes/tegra-boot-flow.html)
   * [Platform Adaptation and Bring-up Guide for TK1](http://developer.download.nvidia.com/embedded/jetson/TK1/docs/4_PlatformSWDev/Platform_Adaptation_and_Bring-Up_Guide.pdf)
-  * [Developer User Guide Documentation](http://developer.nvidia.com/embedded/dlc/l4t-documentation-23-2)
+  * [Developer User Guide Documentation](http://developer.nvidia.com/embedded/dlc/l4t-documentation-24-1)
 
 
 An overview of what of the whole process consists of:
@@ -31,10 +28,9 @@ An overview of what of the whole process consists of:
   * Modify flash tools
   * Creating convenience scripts
 
-
 ## Setup Your Host
 
-To simplify this discussion I'm going to create a board called **quokka** and focus on developing for the 23.2 L4T, this may change later when NVIDIA releases newer builds.
+To simplify this discussion I'm going to create a board called **quokka** and focus on developing for the 24.1 L4T, this may change later when NVIDIA releases newer builds.
 
 I'll make a directory to do all of this work in:
 
@@ -63,13 +59,13 @@ mkdir -p ~/Projects/tx1/quokka_config_files
 In order to set your host computer up to build the kernel and u-boot follow the 'Getting Started Instructions' in the developer user guide linked above
 
 
-Extract the [Developer User Guide Documentation](http://developer.nvidia.com/embedded/dlc/l4t-documentation-23-2) to a docs directory
+Extract the [Developer User Guide Documentation](http://developer.nvidia.com/embedded/dlc/l4t-documentation-24-1) to a docs directory
 
 {% highlight bash %}
 mkdir -p ~/Projects/tx1/docs
 cd ~/Projects/tx1/docs
-cp ~/Downloads/Tegra_Linux_Driver_Package_Documents_R23.2.tar .
-tar xvf Tegra_Linux_Driver_Package_Documents_R23.2.tar
+cp ~/Downloads/Tegra_Linux_Driver_Package_Documents_R24.1.tar .
+tar xvf Tegra_Linux_Driver_Package_Documents_R24.1.tar
 {% endhighlight %}
 
 
@@ -95,8 +91,8 @@ Download and move the archive from Downloads to your TX1 directory
 
 {% highlight bash %}
 cd ~/Projects/tx1/
-mv ~/Downloads/Tegra210_Linux_R23.2.0_armhf.tbz2 .
-tar xvf Tegra210_Linux_R23.2.0_armhf.tbz2
+mv ~/Downloads/Tegra210_Linux_R24.1.0_armhf.tbz2 .
+tar xvf Tegra210_Linux_R24.1.0_armhf.tbz2
 {% endhighlight %}
 
 
@@ -106,9 +102,9 @@ Get the rootfs from the download page and move it to the docs directory, then ex
 
 {% highlight bash %}
 cd ~/Projects/tx1/Linux_for_Tegra/rootfs
-mv ~/Downloads/Tegra_Linux_Sample-Root-Filesystem_R23.2.0_armhf.tbz2 .
-sudo tar xf Tegra_Linux_Sample-Root-Filesystem_R23.2.0_armhf.tbz2
-rm Tegra_Linux_Sample-Root-Filesystem_R23.2.0_armhf.tbz2
+mv ~/Downloads/Tegra_Linux_Sample-Root-Filesystem_R24.1.0_armhf.tbz2 .
+sudo tar xf Tegra_Linux_Sample-Root-Filesystem_R24.1.0_armhf.tbz2
+rm Tegra_Linux_Sample-Root-Filesystem_R24.1.0_armhf.tbz2
 {% endhighlight %}
 
 I chose to delete the archive because it's 600MB and if I left it in that directory it would be copied to the TX1 when flashing.
@@ -123,7 +119,7 @@ Get the kernel source by navigating to Linux_for_Tegra and run:
 
 {% highlight bash %}
 cd ~/Projects/tx1/Linux_for_Tegra
-./source_sync.sh -k tegra-l4t-r23.2.update-01
+./source_sync.sh -k tegra-l4t-r24.1.update-01
 {% endhighlight %}
 
 navigate to the kernel base and create a new branch called 'quokka'
@@ -140,7 +136,7 @@ Similar to the kernel sources get the U-Boot source by navigating to Linux_for_T
 
 {% highlight bash %}
 cd ~/Projects/tx1/Linux_for_Tegra
-./source_sync.sh -u tegra-l4t-r23.2
+./source_sync.sh -u tegra-l4t-r24.1
 {% endhighlight %}
 
 navigate to the u-boot base and create a new branch called 'quokka'
