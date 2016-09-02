@@ -38,20 +38,33 @@ I'll make a directory to do all of this work in:
 mkdir -p ~/Projects/tx1
 {% endhighlight %}
 
-Make sure to have all the required build toolchains installed:
-
 {% highlight bash %}
 echo "Install 32-bit ARM Cross Compiler"
 sudo apt-get install gcc-arm-linux-gnueabi
-echo "Install 64-bit ARM Cross Compiler"
-sudo apt-get install gcc-aarch64-linux-gnu
+{% endhighlight %}
+
+Make a directory for the 64-bit toolchain and move into it
+
+{% highlight bash %}
+mkdir -p aarch-64-toolchain
+cd aarch-64-toolchain
 {% endhighlight %}
 
 
-To simplify things we'll make a directory where we can store all the output files from the pinmux called 'quokka_config_files'
+Download the toolchain to this new directory and uncompress it
 
 {% highlight bash %}
-mkdir -p ~/Projects/tx1/quokka_config_files
+wget https://releases.linaro.org/components/toolchain/binaries/latest-5/aarch64-elf/gcc-linaro-5.3.1-2016.05-x86_64_aarch64-elf.tar.xz
+tar xvf gcc-linaro-5.3.1-2016.05-x86_64_aarch64-elf.tar.xz
+{% endhighlight %}
+
+
+
+
+To simplify things we'll make a directory where we can store all the output files from the pinmux called 'pinmux_config'
+
+{% highlight bash %}
+mkdir -p ~/Projects/tx1/pinmux_config
 {% endhighlight %}
 
 ### Getting the documentation
@@ -119,8 +132,34 @@ Get the kernel source by navigating to Linux_for_Tegra and run:
 
 {% highlight bash %}
 cd ~/Projects/tx1/Linux_for_Tegra
-./source_sync.sh -k tegra-l4t-r24.1.update-01
+./source_sync.sh -k l4t/l4t-r24.1
 {% endhighlight %}
+
+#### NOTE: How to select the correct Git Tag
+
+In the 'Building the NVIDIA kernel' section there is the following:
+
+To rebuild the kernel
+1. Get the kernel source by running the source_sync.sh script:
+{% highlight bash %}
+$ ./source_sync.sh -k
+{% endhighlight %}
+When prompted enter a ‘tag’ name, as provided in the release notes.
+—Or—
+Manually sync the sources, as follows:
+{% highlight bash %}
+$ cd <myworkspace>
+$ git clone git://nv-tegra.nvidia.com/linux-<lnx_ver>.git kernel_sources
+$ cd kernel_sources
+$ git checkout <release_tag>
+{% endhighlight %}
+
+Click on the 'release_tag' section and it will display the tag
+
+#### NOTE OF A NOTE:
+After following my notes and trying to create a branch for my board I ran into some issues and found it was better if I just checkout out the branch l4t/l4t-r24.1 instead of tegra-l4t-r24.1
+
+### Navigate to the kernel source and create a new  branch with the name of your board
 
 navigate to the kernel base and create a new branch called 'quokka'
 
@@ -136,8 +175,10 @@ Similar to the kernel sources get the U-Boot source by navigating to Linux_for_T
 
 {% highlight bash %}
 cd ~/Projects/tx1/Linux_for_Tegra
-./source_sync.sh -u tegra-l4t-r24.1
+./source_sync.sh -u <release_tag>
 {% endhighlight %}
+
+### NOTE: The tag for u-boot is the same for the kernel
 
 navigate to the u-boot base and create a new branch called 'quokka'
 
@@ -193,10 +234,10 @@ Otherwise if everything is fine then all the editable regions will stay orange.
 After you have made your changes to pinmux save the file as a CSV file called: 'quokka-2180.csv'
 
 ### Save the kernel pinmux dtsi file
-The spreadsheet will also generate a dtsi file that will be read by the kernel later on so we need to copy it to our 'quokka_config_files' folder we created earlier
+The spreadsheet will also generate a dtsi file that will be read by the kernel later on so we need to copy it to our 'pinmux_config' folder we created earlier
 
 {% highlight bash %}
-cd ~/Projects/tx1/quokka_config_files
+cd ~/Projects/tx1/pinmux_config
 cp ~/Downloads/tegra210-quokka-pinmux.dtsi .
 {% endhighlight %}
 
@@ -253,7 +294,7 @@ supported_boards = {
     },
     'quokka-2180': {
         # Custom board
-        'filename': '../quokka_config_files/quokka-2180.csv',
+        'filename': '../pinmux_config/quokka-2180.csv',
         'rsvd_base': 0,
         'soc': 'tegra210',
     },
@@ -283,7 +324,7 @@ Move your csv file to where it's specified in the csv-to-board location
 
 
 {% highlight bash %}
-cd ~/Projects/tx1/quokka_config_files
+cd ~/Projects/tx1/pinmux_config
 mv ~/Downloads/quokka-2180.csv .
 {% endhighlight %}
 
@@ -326,12 +367,12 @@ cd ~/Projects/tx1/tegra-pinmux-scripts
 ./board-to-uboot.py quokka-2180
 {% endhighlight %}
 
-This will output the header file to stdout so you will need to redirect the output to a file. For reasons I'll explain later call this new file: pinmux-config-quokka-2180.h
+This will output the header file to stdout so you will need to redirect the output to a file. For reasons I'll explain later call this new file: g-quokka-2180.h
 
 
 {% highlight bash %}
 cd tegra-pinmux-scripts
-./board-to-uboot.py quokka-2180 > pinmux-config-quokka-2180.h
+./board-to-uboot.py quokka-2180 > pinmux-quokka-2180.h
 {% endhighlight %}
 
 
@@ -391,7 +432,7 @@ The X1 SOC on the TX1 actually contains two processor.
   * Main Processor called CCPLEX
 The Boot processor prepares everything before starting then handing off control to the main processor.
 
-When the SOC turns on the boot processor wakes up and reads the stae of both the fuses and straps.
+When the SOC turns on the boot processor wakes up and reads the state of both the fuses and straps.
 
   * Straps: These are actual pins that are read by the chip when the board turns on. This is easy to modify by simply adding external resistors or shorts to the TX1 Module pins.
   * Fuses: Internally configuration bits that usually is set by the manufacturer. These are more challenging to modify
@@ -414,7 +455,7 @@ Jumps to bootloader entry point and starts executing.
 
 U-Boot is the tool that prepares the SOC for the kernel. In order to prepare it for our board we need to modify u-boot.
 
-At a high level we'll be
+At a high level we'll
 
   * Create a configuration file for U-Boot
   * Create a Device Tree Source (DTS) to describe our hardware to U-Boot
@@ -450,7 +491,7 @@ to this
 
 <pre>
 /* High-level configuration options */
-#define V_PROMPT			"Tegra210 (P2371-quokka) # "
+#define V_PROMPT			"Tegra210 (quokka-2180) # "
 #define CONFIG_TEGRA_BOARD_STRING	"NVIDIA QUOKKA-2180"
 </pre>
 
@@ -578,7 +619,7 @@ Inside this new directory are a some files to modify
   * Makefile
   * Kconfig                     Build Configuration File
   * p2371-2180.c                Board Specific Functions
-  * pinmux-config-p2371-2180.h  Our Pinmux Configuration File
+  * g-p2371-2180.h  Our Pinmux Configuration File
 
 First Modify the MAINTINERS and add yourself to it
 
@@ -589,17 +630,23 @@ Instead of modifying every single file we can use sed to do some of this work fo
 {% highlight bash %}
 
 cd ~/Projects/tx1/Linux_for_Tegra/sources/u-boot_source/board/nvidia/quokka-2180
-echo "Change the filenames to reflect our board"
+
+echo "Change the board c file name to reflect our project filename"
 mv p2371-2180.c quokka-2180.c
-mv pinmux-config-p2371-2180.h pinmux-config-quokka-2180.h
+
+echo "Remove the current pinmux file with our pinmux file"
+rm pinmux-config-p2371-2180.h
+mv ../../../../../../pinmux-config-quokka-2180.h .
+
+echo "use sed to replace the reference to the previous board pinmux with our board pinmux"
+grep -rIl 'pinmux-config-p2371-2180.h' | xargs sed -i 's/pinmux-config-p2371-2180.h/pinmux-config-quokka2180.h/g'
+
 echo "Use grep to find the files with a certain string and use sed to replace the string with our board"
+grep -ril 'TARGET_P2371_2180' | xargs sed -i 's/TARGET_P2371_2180/TARGET_QUOKKA_2180/g'
 grep -rIl 'p2371-2180' | xargs sed -i 's/p2371-2180/quokka-2180/g'
 grep -rIl 'p2371_2180' | xargs sed -i 's/p2371_2180/quokka_2180/g'
 grep -rIl 'P2371_2180' | xargs sed -i 's/P2371_2180/QUOKKA_2180/g'
 {% endhighlight %}
-
-
-The pinmux-config-p2371-2180.h file is incorrec we need to replace it with the one we generated earlier or we can just pipe the output of the pinmux script to this file:
 
 
 {% highlight bash %}
@@ -610,14 +657,14 @@ cd ~/Projects/tx1/tegra-pinmux-scripts
 
 ### Modify Kconfig for the SOC
 
-When selecting an SOC like the Tegra 210 you the build configuration allows you to select certain compatible boards. We need to modify that configuration script to allow our board to be selected.
+When selecting an SOC like the Tegra 210 the build configuration allows you to select certain compatible boards. We need to modify that configuration script to allow our board to be selected.
 
 Go to the SOC folder and modify the Kconfig file
 
-< %highlight% bash>
+{% highlight bash %}
 cd ~/Projects/tx1/Linux_for_Tegra/sources/u-boot_source/arch/arm/mach-tegra/tegra210
 vim Kconfig
-< %endhighlight% >
+{% endhighlight %}
 
 Modify the file to tell the build system we have another option for the board
 
@@ -716,11 +763,11 @@ Before you start modifying u-boot it's a good idea to build it so we know we mad
 {% highlight bash %}
 #! /bin/bash
 
-echo "Setting Environmental Variables..."
+"Setting Environmental Variables..."
 export ARCH=arm64
-export CROSS_COMPILE=aarch64-linux-gnu-
 export CROSS32CC=arm-linux-gnueabi-gcc
 export TX_BASE_DIR=${PWD}
+export CROSS_COMPILE=$TX_BASE_DIR/aarch-64-toolchain/gcc-linaro-5.3.1-2016.05-x86_64_aarch64-elf/bin/aarch64-elf-
 export TEGRA_UBOOT_OUT=$TX_BASE_DIR/Linux_for_Tegra/bootloader/t210ref/quokka-2180
 export ROOTFS_PATH=$TX_BASE_DIR/Linux_for_Tegra/rootfs
 export UBOOT_SOURCE=$TX_BASE_DIR/Linux_for_Tegra/sources/u-boot_source
@@ -729,6 +776,7 @@ export UBOOT_SOURCE=$TX_BASE_DIR/Linux_for_Tegra/sources/u-boot_source
 COMMAND="BUILD"
 
 #Parse the Inputs
+echo "Key: $1"
 
 while [[ $# > 0 ]]
 do
@@ -762,14 +810,13 @@ if [ "$COMMAND" == "REBUILD" ]; then
   echo "Re-Build"
   make mrproper
   make O=$TEGRA_UBOOT_OUT -j4 distclean
-  make O=$TEGRA_UBOOT_OUT -j4 quokka-2180_defconfig
+  make O=$TEGRA_UBOOT_OUT -j4 mit-uav-reva_defconfig
   make O=$TEGRA_UBOOT_OUT -j4
 fi
 if [ "$COMMAND" == "MENU" ]; then
   echo "Menu Config"
   make O=$TEGRA_UBOOT_OUT -j4 menuconfig
 fi
-
 {% endhighlight %}
 
 
@@ -832,7 +879,7 @@ cp tegra210-jetson-cv-base-p2597-2180-a00.dts tegra210-jetson-cv-base-quokka-218
 add the dtsi file created from the pinmux tool earlier to 'tegra210-platform' directory
 
 {% highlight bash %}
-cd ~/Projects/tx1/quokka_config_files
+cd ~/Projects/tx1/pinmux_config
 cp tegra210-quokka-pinmux.dtsi ~/Projects/tx1/Linux_for_Tegra/sources/kernel_source/arch/arm64/boot/dts/tegra210-platforms/
 {% endhighlight %}
 
@@ -933,11 +980,21 @@ dtb-$(CONFIG_ARCH_TEGRA_21x_SOC) += tegra210-jetson-tx1-p2597-2180-a02-devkit-24
 </pre>
 
 
+# Create a kernel board config file
+
+change to the config files for the boards and copy pre-existing configuration file
+{% highlight bash %}
+cd ~/Projects/tx1/Linux_for_Tegra/sources/kernel_source/arch/arm64/configs
+cp tegra21_defconfig mit_uav_reva_defconfig
+{% endhighlight %}
+
+Now modify the file so that it 
+
 # Modify Flash Tools
 
-The flash tools are configured to install the bootloader and kernel to the board.
+The flash tools are configured to install the bootloader and kernel to the board, in order to adapt our board, we'll do the following
 
-  * Copy and modify exiting extlinux.conf\* files to describe medium dependent boot configuration to the bootloader
+  * Copy and modify existing extlinux.conf\* files to describe medium (sdmmc, usb, etc...) dependent boot configuration to the bootloader
   * Copy and modify the medium independent flash configuration file: quokka-2180.conf
   * Create a board configuration file
 
@@ -998,7 +1055,7 @@ LABEL primary
 
 ## Create the board configuration XML file
 
-The board configuration file populates constants that are board depenedent. These constants describe the ID of the processor the deisplay and the power management unit.
+The board configuration file populates constants that are board depenedent. These constants describe the ID of the processor the display and the power management unit.
 
 //XXX I'm not sure exactly what this is for?? I would venture to guess that these values are loaded directly into the boot medium to be read by the bootloader.
 
@@ -1007,7 +1064,6 @@ Copy the board_config_p2597-defkit.xml to a new board_config_quokka.xml
 {% highlight bash %}
 cd ~/Projects/tx1/Linux_for_Tegra/bootloader/t210ref/cfg
 cp board_config_p2597-devkit.xml board_config_quokka.xml
-vim quokka-2180/extlinux.conf.emmc
 {% endhighlight %}
 
 ## Create a flash configuration file for the flash tool
@@ -1019,7 +1075,7 @@ copy and edit the new quokka-2180.conf file:
 {% highlight bash %}
 cd ~/Projects/tx1/Linux_for_Tegra
 cp p2371-2180-devkit.conf quokka-2180.conf
-vim quokka-2180/extlinux.conf.emmc
+vim quokka-2180.conf
 {% endhighlight %}
 
 we need to change the following properties:
