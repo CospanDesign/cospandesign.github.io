@@ -1048,7 +1048,7 @@ MENU TITLE quokka-2180 eMMC boot options
 LABEL primary
       MENU LABEL primary kernel
       LINUX /boot/Image
-			FDT /boot/tegra210-quokka-2180-a01.dts
+			FDT /boot/tegra210-quokka-2180-a01.dtb
 ...
 </pre>
 
