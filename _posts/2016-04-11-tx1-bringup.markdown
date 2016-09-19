@@ -980,16 +980,6 @@ dtb-$(CONFIG_ARCH_TEGRA_21x_SOC) += tegra210-jetson-tx1-p2597-2180-a02-devkit-24
 </pre>
 
 
-# Create a kernel board config file
-
-change to the config files for the boards and copy pre-existing configuration file
-{% highlight bash %}
-cd ~/Projects/tx1/Linux_for_Tegra/sources/kernel_source/arch/arm64/configs
-cp tegra21_defconfig mit_uav_reva_defconfig
-{% endhighlight %}
-
-Now modify the file so that it 
-
 # Modify Flash Tools
 
 The flash tools are configured to install the bootloader and kernel to the board, in order to adapt our board, we'll do the following
