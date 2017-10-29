@@ -1,0 +1,1024 @@
+---
+layout: post
+title:  "Porting NVIDIA TX2 to a New Platform"
+date:   2017-10-27 09:29:59 -0400
+categories: Linux
+---
+
+The following are steps required to bringup the TX2 on a new platform. The steps involved are different than the TX1 primarily due to NVIDIA's new code organization.
+
+The resources I used to bring up our board 'blackbird' comes from the following resources:
+
+
+  * [Platform Adaptation and Bring-up Guide for TX2](https://developer.nvidia.com/embedded/dlc/l4t-driver-package-tx2-adaptation-guide)
+  * [Developer User Guide Documentation](https://developer.nvidia.com/embedded/dlc/l4t-documentation-28-1)
+
+
+An overview of what of the whole process consists of:
+
+  * Setting up the host computer
+	* Getting the documentation
+  * Defining the behaviour of the pins with the Pinmux tool
+  * Configuring the bootloader
+  * Configuratin the kernel
+  * Configure upload tool
+  * Modify flash tools
+  * Creating convenience scripts
+
+## Setup Your Host
+
+To simplify this discussion I'm going to create a board called **blackbird** and focus on developing for the 28.1 L4T, this may change later when NVIDIA releases newer builds.
+
+I'll make a directory to do all of this work in:
+
+{% highlight bash %}
+mkdir -p ~/Projects/nvidia_3.1
+{% endhighlight %}
+
+Make a directory for the 64-bit toolchain and move into it
+
+{% highlight bash %}
+mkdir -p toolchain
+cd toolchain
+{% endhighlight %}
+
+Download the toolchain to this new directory and uncompress it
+
+{% highlight bash %}
+wget -O toolchain.tar.xz https://developer.nvidia.com/embedded/dlc/l4t-gcc-toolchain-64-bit-28-1
+tar xvf toolchain.tar.xz
+{% endhighlight %}
+
+
+_Currently the tool used to create the pinmux for the bootloader is not working becuase the t186 processor configuration file is not defined yet so, at the moment, the pinmux configuration can only be used for the kernel_
+
+
+## Getting the documentation
+
+In order to set your host computer up to build the kernel and u-boot follow the 'Getting Started Instructions' in the developer user guide linked above
+
+
+Extract the [Developer User Guide Documentation](https://developer.nvidia.com/embedded/dlc/l4t-documentation-28-1) to a docs directory
+
+{% highlight bash %}
+mkdir -p ~/Projects/nvidia_3.1/docs
+cd ~/Projects/nvidia_3.1/docs
+cp ~/Downloads/Tegra_Linux_Driver_Package_Documents_R28.1.tar .
+tar xvf Tegra_Linux_Driver_Package_Documents_R28.1.tar
+{% endhighlight %}
+
+
+Using a web browser, navigate to the base directory and open up the 'Start_L4T_Docs.html'
+
+{% highlight bash %}
+
+cd ~/Projects/nvidia_3.1/docs
+google-chrome Start_L4t_Docs.html
+{% endhighlight %}
+
+Navigate to 'Getting Started'
+
+
+
+
+
+## Get the L4T Development Environment
+
+NVIDIA has done the bulk of the work adapting the bootloader (u-boot) and the kernel to the NVIDIA TX2. They have added the necessary board support files and configuration files to u-boot as well as platform specific kernel code and drivers as well as the necessary kernel configuration files (DTS).
+
+The organization for the TX1 is different than the TX2.
+
+For the TX1 the source code was organized into two directories: u-boot and the kernel. It was straigt forward. The TX2 is more complicated but after some thought it seems to be a smarter solution.
+
+The TX2 source is organized into three base directories: u-boot, kernel and hardware. With sub-folders within the kernel.
+
+This method simplifies the process of upgrading the kernel. Instead of all of NVIDIA's code intermixed with the kernel code it is decoupled.
+
+
+
+NVIDIA provides a set of tools that are helpful to get started. Get the 'dirver package' for 28.1 from the TX2 download page:
+
+[NVIDIA TX2 28.1 Driver Package](https://developer.nvidia.com/embedded/dlc/l4t-jetson-tx2-driver-package-28-1)
+
+
+There are some parts of the documentation that left me feeling a little confused. Some are small some are big.
+
+Whenever the documentation indicates that you should extract a package just run to the download page and grab it as an example: in the section 'Extracting Tegra Linux Driver Package' it just says that I need to extract the source file. I thought 'should I already have this package?' You can find all the packages referenced in the [Nvidia TX2 Download Page](https://developer.nvidia.com/embedded/downloads)
+
+
+
+
+Download and move the archive from Downloads to your TX2 directory
+
+{% highlight bash %}
+cd ~/Projects/nvidia_3.1/
+mv ~/Downloads/Tegra186_Linux_R28.1.0_aarch64.tbz2 .
+tar xvf Tegra186_Linux_R28.1.0_aarch64.tbz2
+{% endhighlight %}
+
+
+## Set up the root file system
+
+Get the rootfs from the download page and extract it to the rootfs directory as root. This is important because when the rootfs is copied to the TX2 all the permissions of the files will be Root
+
+{% highlight bash %}
+cd ~/Projects/nvidia_3.1/Linux_for_Tegra/rootfs
+sudo tar -jxpf ~/Downloads/ROOTFS_NAME.tbz2
+echo "Removing archive from download directory because it's a big file"
+rm ~/Downloads/ROOTFS_NAME.tbz2
+{% endhighlight %}
+
+I chose to delete the archive because it's 600MB and if I left it in that directory it would be copied to the TX2 when flashing.
+
+## Get the sources
+
+Get the sources by using the 'source_sync.h' script within Linux_for_Tegra directory
+
+### Get the Kernel Source
+
+Get the kernel source by navigating to Linux_for_Tegra and run:
+
+{% highlight bash %}
+cd ~/Projects/nvidia_3.1/Linux_for_Tegra
+./source_sync.sh -k l4t/l4t-r28.1
+{% endhighlight %}
+
+#### NOTE: How to select the correct Git Tag
+
+In the 'Building the NVIDIA kernel' section there is the following:
+
+To rebuild the kernel
+1. Get the kernel source by running the source_sync.sh script:
+{% highlight bash %}
+$ ./source_sync.sh -k
+{% endhighlight %}
+When prompted enter a ‘tag’ name, as provided in the release notes.
+—Or—
+Manually sync the sources, as follows:
+{% highlight bash %}
+$ cd <myworkspace>
+$ git clone git://nv-tegra.nvidia.com/linux-<lnx_ver>.git kernel_sources
+$ cd kernel_sources
+$ git checkout <release_tag>
+{% endhighlight %}
+
+Click on the 'release_tag' section and it will display the tag
+
+#### NOTE OF A NOTE:
+After following my notes and trying to create a branch for my board I ran into some issues and found it was better if I just checkout out the branch l4t/l4t-r28.1 instead of tegra-l4t-r28.1
+
+### Get the u-boot Source
+
+Similar to the kernel sources get the u-boot source by navigating to Linux_for_Tegra and runing:
+
+{% highlight bash %}
+cd ~/Projects/nvidia_3.1/Linux_for_Tegra
+./source_sync.sh -u <release_tag>
+{% endhighlight %}
+
+### NOTE: The tag for u-boot is the same for the kernel
+
+navigate to the u-boot base and create a new branch called 'blackbird'
+
+{% highlight bash %}
+cd ~/Projects/nvidia_3.1/Linux_for_Tegra/sources/u-boot_source
+git branch blackbird
+git checkout blackbird
+{% endhighlight %}
+
+
+Okay we set up the sources, now it's time to start configuring them
+
+
+
+# Pinmux
+
+An SOC contains a lot of functionality but there are two major issues with this:
+
+  * There may be more functionality within the chip than there are pins so a multiplexer (or selector) is used to allow the designer to select which functions the physical pins exposes.
+  * The user may want to change the pin location of certain functionality. For example you may want UART TX and RX to be located on a different set of pins due to layout issues or because you want the original pins to be used for something else.
+
+It is challenging to modify the pin configuration. It seems that every manufacturer has a different mechanism to do this. Some require the developer to select and verify that all functionality of the pin multiplexer is correctly implemented by hand. This is tuff because a mistake can cause physical damage or a difficult to detect software error. TI has a whole application dedicated to this: NVIDIA's Pin Mux Tool is a simple, yet effective, Excel Pin Mux Sheet the pinmux selection process is as follows (More details below):
+
+  * Download the Pinmux Spreadsheet: [Pinmux Spreadsheet](https://developer.nvidia.com/embedded/dlc/jetson-tx2-module-pinmux)
+  * Modify the table so that the functions that you want are exposed on the pins you want.
+  * Using the Spreadsheet generate the DT file. This will be used during the hand off from bootloader to kernel.
+
+## Detailed Pinmux Flow
+
+### Edit Pinmux Spreadsheet
+After downloading the pinmux spreadsheet open the spreadsheet with Microsoft Excel. I tried to use Office Libre Spreadsheet but the internal macros didn't work that well and all I got were a bunch of errors on the page.
+
+_edit: I have been successful in geneating macros using office libre_
+
+![Pinmux Spreadsheet]({{ site.baseurl }}/assets/image/posts/tx2-bringup/pinmux_tool.PNG)
+
+It's a little hard to see but on the left is the name of the pin and ball, there are columns describing the possible functions of the pins and the pins. As an example pin H1 names DAP1_DOUT can be configured in the following way:
+
+  * Left disconnected (unused)
+  * A GPIO called GPIO3_PB.02
+  * I2S Serial Data Out.
+
+All orange cells are customizable. You make your selecton under 'Customer Usage'
+
+If your pinmux combination leads to an error the cells in questions will turn red and you'll see something like this:
+
+![Pinmux Spreadsheet]({{ site.baseurl }}/assets/image/posts/tx2-bringup/pinmux_tool_error.PNG)
+
+Otherwise if everything is fine then all the editable regions will stay orange.
+
+### Save the kernel pinmux dtsi file
+Using the big  spreadsheet will generate a dtsi file that will be read by the kernel later on so we need to copy it to our 'pinmux_config' folder we created earlier
+
+# Bootloader
+
+There are two stages of bootloading in the TX2:
+	* MLB: NVIDIA Specific bootloader, used to get the most basic parts of the chip up and running, once this is finished control is handed off to u-boot.
+	*	u-boot: Vendor independent bootloader, used to prepare to board to boot the kernel.
+
+## MLB
+	* Copy the current Quill configuration file found in:
+		*	Linux_for_Tegra/bootloader/t186ref/BCT/tegra186_mb1_bct_pmic_quill_p3310_1000_c04.cfg > Linux_for_Tegra/bootloader/t186ref/BCT/tegra186_mb1_bct_pmic_blackbird_p3310_1000_a00.cfg
+
+## u-boot
+
+u-boot is the tool that prepares the SOC for the kernel. In order to prepare it for our board we need to modify u-boot.
+
+At a high level we'll
+
+  * Create a configuration header file for our board, we would nornally call the u-boot pin mux configuration tool but since this is unavailable we will leave it up to the kernel to configure the pinmux.
+  * Create a Device Tree Source (DTS) to describe our hardware to u-boot. Modify the Makefile to recognize this DTS file.
+	* Create a default configuration (blackbird_defconfig) file for the Makefile.
+  * Add a board directory to expose board specific functions and configurations
+  * Modify Kconfig for the SOC to recognize our board
+
+### Add a board configuration file (u-boot Configuration File)
+
+Add new board configuration header by copying the NVIDIA TX2 Development Board
+
+{% highlight bash %}
+cd ~/Projects/tx2/Linux_for_Tegra/sources/u-boot_source/include/configs
+cp p2771-0000.h blackbird.h
+{% endhighlight %}
+
+Modify some values to help identify your board when u-boot is booting:
+
+{% highlight bash %}
+cd ~/Projects/tx2/Linux_for_Tegra/sources/u-boot_source/include/configs
+vim blackbird.h
+{% endhighlight %}
+
+Change the high level configuration options from this
+
+<pre>
+/* High-level configuration options */
+#define V_PROMPT			"Tegra210 (P2371-2180) # "
+#define CONFIG_TEGRA_BOARD_STRING	"NVIDIA P2371-2180"
+</pre>
+
+to this
+
+<pre>
+/* High-level configuration options */
+#define V_PROMPT			"Tegra210 (blackbird-2180) # "
+#define CONFIG_TEGRA_BOARD_STRING	"VENDOR BLACKBIRD Rev A00"
+</pre>
+
+
+### Add a DTS (Hardware Description File)
+
+A DTS or (Device Tree Source) describes the hardware of your platform, it's not a configuration file as much as it simply describes what exists. The idea is that the DTS is OS Independent. This file will allow us to enable and disable portions of the TX2 Module. Things that distinguish blackbird from other boards.
+
+Similar to the board configuration file copy the NVIDIA TX2 Development Board dts file to 'blackbird-2180.dts'
+
+{% highlight bash %}
+cd ~/Projects/tx2/Linux_for_Tegra/sources/u-boot_source/arch/arm/dts
+cp tegra186-p2771-0000.dts tegra186-blackbird-2180.dts
+{% endhighlight %}
+
+Modify some values to help identify your board when u-boot is booting:
+
+{% highlight bash %}
+cd ~/Projects/tx2/Linux_for_Tegra/sources/u-boot_source/arch/arm/dts
+vim tegra186-blackbird-2180.dts
+{% endhighlight %}
+
+
+Change this:
+
+<pre>
+	model = "NVIDIA P2771-0000-500";
+	compatible = "nvidia,p2771-0000-500", "nvidia,p2771-0000", "nvidia,tegra186";
+</pre>
+
+To this:
+
+<pre>
+	model = "NVIDIA QUOKKA-2180";
+	compatible = "nvidia,blackbird", "nvidia,p2771-0000", "nvidia,tegra186";
+</pre>
+
+
+Similar to normal makefiles we'll need to let the local Makefile know that this new device tree source file is here and needs to be compiled.
+
+Go to the DTS Makefile and edit it:
+
+{% highlight bash %}
+cd ~/Projects/tx2/Linux_for_Tegra/sources/u-boot_source/arch/arm/dts
+vim Makefile
+{% endhighlight %}
+
+
+Modify this:
+
+<pre>
+dtb-$(CONFIG_TEGRA) += tegra20-harmony.dtb \
+	tegra20-medcom-wide.dtb \
+	tegra20-paz00.dtb \
+	tegra20-plutux.dtb \
+	tegra20-seaboard.dtb \
+	tegra20-tec.dtb \
+	tegra20-trimslice.dtb \
+	tegra20-ventana.dtb \
+	tegra20-whistler.dtb \
+	tegra20-colibri.dtb \
+	tegra30-apalis.dtb \
+	tegra30-beaver.dtb \
+	tegra30-cardhu.dtb \
+	tegra30-colibri.dtb \
+	tegra30-tec-ng.dtb \
+	tegra114-dalmore.dtb \
+	tegra124-jetson-tk1.dtb \
+	tegra124-nyan-big.dtb \
+	tegra124-venice2.dtb \
+	tegra186-p2771-0000-000.dtb \
+	tegra186-p2771-0000-500.dtb \
+	tegra210-e2220-1170.dtb \
+	tegra210-p2371-0000.dtb \
+	tegra210-p2771-0000.dtb \
+	tegra210-p2571.dtb \
+	tegra210-m3402-0000.dtb
+</pre>
+
+To this:
+
+<pre>
+dtb-$(CONFIG_TEGRA) += tegra20-harmony.dtb \
+	tegra20-medcom-wide.dtb \
+	tegra20-paz00.dtb \
+	tegra20-plutux.dtb \
+	tegra20-seaboard.dtb \
+	tegra20-tec.dtb \
+	tegra20-trimslice.dtb \
+	tegra20-ventana.dtb \
+	tegra20-whistler.dtb \
+	tegra20-colibri.dtb \
+	tegra30-apalis.dtb \
+	tegra30-beaver.dtb \
+	tegra30-cardhu.dtb \
+	tegra30-colibri.dtb \
+	tegra30-tec-ng.dtb \
+	tegra114-dalmore.dtb \
+	tegra124-jetson-tk1.dtb \
+	tegra124-nyan-big.dtb \
+	tegra124-venice2.dtb \
+	tegra186-blackbird.dtb \
+	tegra186-p2771-0000-000.dtb \
+	tegra186-p2771-0000-500.dtb \
+	tegra210-e2220-1170.dtb \
+	tegra210-p2371-0000.dtb \
+	tegra210-p2771-0000.dtb \
+	tegra210-p2571.dtb \
+	tegra210-m3402-0000.dtb
+</pre>
+
+
+### Add a unique board directory
+
+A board directory is where unique board functions are. Specifically within blackbird.c. Besides the source file there is a maintainers file as well as Makefiles for the board.
+
+We'll copy the p2771-0000 directory and modify it for our board.
+
+{% highlight bash %}
+cd ~/Projects/tx2/Linux_for_Tegra/sources/u-boot_source/board/nvidia
+cp -a p2771-0000 blackbird
+{% endhighlight %}
+
+Inside this new directory are a some files to modify
+
+  * MAINTAINERS									Information that can be used to find you if people have questions.
+  * Makefile
+  * Kconfig                     Build Configuration File
+  * p2771-0000.c                Board Specific Functions
+  * ~~blackbird.h  							Our Pinmux Configuration File~~
+
+First Modify the MAINTINERS and add yourself to it
+
+Instead of modifying every single file we can use sed to do some of this work for us
+
+{% highlight bash %}
+
+cd ~/Projects/tx2/Linux_for_Tegra/sources/u-boot_source/board/nvidia/blackbird
+
+echo "Change the board c file name to reflect our project filename"
+mv p2771-0000.c blackbird.c
+{% endhighlight %}
+
+~~Fix the pinmux~~
+{% highlight bash %}
+~~echo "Remove the current pinmux file with our pinmux file"~~
+~~rm pinmux-config-p2771-0000.h~~
+~~mv ../../../../../../pinmux-config-blackbird-2180.h .~~
+{% endhighlight %}
+
+echo "use sed to replace the reference to the previous board pinmux with our board pinmux"
+grep -rIl 'pinmux-config-p2771-0000.h' | xargs sed -i 's/pinmux-config-p2771-0000.h/pinmux-config-blackbird2180.h/g'
+
+echo "Use grep to find the files with a certain string and use sed to replace the string with our board"
+grep -ril 'TARGET_2771_0000' | xargs sed -i 's/TARGET_P2771_0000/TARGET_BLACKBIRD/g'
+grep -rIl 'p2771-0000' | xargs sed -i 's/p2771-0000/blackbird/g'
+grep -rIl 'p2771_0000' | xargs sed -i 's/p2771_0000/blackbird/g'
+grep -rIl 'P2771_0000' | xargs sed -i 's/P2771_0000/BLACKBIRD/g'
+{% endhighlight %}
+
+
+{% highlight bash %}
+~~cd ~/Projects/tx2/tegra-pinmux-scripts~~
+~~./board-to-uboot.py blackbird-2180 > ~/Projects/tx2/Linux_for_Tegra/sources/u-boot_source/board/nvidia/blackbird-2180/pinmux-config-blackbird-2180.h~~
+{% endhighlight %}
+
+
+### Modify Kconfig for the SOC
+
+When selecting an SOC like the Tegra 186 the build configuration allows you to select certain compatible boards. We need to modify that configuration script to allow our board to be selected.
+
+Go to the SOC folder and modify the Kconfig file
+
+{% highlight bash %}
+cd ~/Projects/tx2/Linux_for_Tegra/sources/u-boot/arch/arm/mach-tegra/tegra186
+vim Kconfig
+{% endhighlight %}
+
+Modify the file to tell the build system we have another option for the board
+
+from this
+
+<pre>
+
+config TARGET_P2771_0000
+	bool "NVIDIA Tegra186 P2771-0000 board"
+	help
+	  P2771-0000 is a P3310 CPU board married to a P2597 I/O board. The
+	  combination contains SoC, DRAM, eMMC, SD card slot, HDMI, USB
+	  micro-B port, Ethernet, USB3 host port, SATA, PCIe, and two GPIO
+	  expansion headers.
+
+</pre>
+
+to this
+
+<pre>
+
+config TARGET_P2771_0000
+	bool "NVIDIA Tegra186 P2771-0000 board"
+	help
+	  P2771-0000 is a P3310 CPU board married to a P2597 I/O board. The
+	  combination contains SoC, DRAM, eMMC, SD card slot, HDMI, USB
+	  micro-B port, Ethernet, USB3 host port, SATA, PCIe, and two GPIO
+	  expansion headers.
+
+config TARGET_BLACKBIRD
+	bool "NVIDIA NVIDA Blackbird board"
+	help
+	  Blackbird is a P3310 CPU board married to a custom carrier board.
+</pre>
+
+
+Also at the bottom of the file we need to tell the build tool what Kconfig files to include our board Kconfig file
+
+in the same file modify this
+
+<pre>
+source "board/nvidia/p2771-0000/Kconfig"
+</pre>
+
+To this:
+
+<pre>
+source "board/nvidia/p2771-0000/Kconfig"
+source "board/nvidia/blackbird/Kconfig"
+</pre>
+
+
+
+### Add a configuration file for the Build tool
+
+The Makefile needs a configuration file for our board.
+
+Go to the u-boot build configuration directory and copy the p2771-0000-500_defconfig to blackbird_defconfig:
+
+{% highlight bash %}
+cd ~/Projects/tx2/Linux_for_Tegra/sources/u-boot_source/configs
+cp p2771-1000-500_defconfig blackbird_defconfig
+{% endhighlight %}
+
+Edit this configuration file to point to our board instead of p2771-0000
+
+{% highlight bash %}
+cd ~/Projects/tx2/Linux_for_Tegra/sources/u-boot_source/configs
+vim blackbird_defconfig
+{% endhighlight %}
+
+Modify this:
+
+<pre>
+CONFIG_TARGET_P2771_0000=y
+CONFIG_DEFAULT_DEVICE_TREE="tegra186-p2771-0000"
+</pre>
+
+To this:
+
+<pre>
+CONFIG_TARGET_BLACKBIRD=y
+CONFIG_DEFAULT_DEVICE_TREE="tegra186-blackbird"
+</pre>
+
+### Add an output directory for u-boot
+
+Add a 'blackbird' folder to Linux_for_Tegra/bootloader/t186ref
+
+{% highlight bash %}
+mkdir -p ~/Projects/nvidia_3.1/Linux_for_Tegra/bootloader/t186ref/blackbird
+{% endhighlight %}
+
+### Build u-boot
+
+So far we have just replicated p2771-0000 (The NVIDIA Devboard). Before you start modifying u-boot to suit your board it's a good idea to build it so we know we made it through a build. NVIDIA provides instructions on how to configure a terminal to build u-boot correct but instead here is a simple script to build u-boot.
+
+This script should be placed in the directory above 'Linux_for_Tegra' or, in our case, ~/Projects/nvidia_3.1
+
+
+{% highlight bash %}
+#! /bin/bash
+
+echo "Setting Environmental Variables..."
+TX_BASE_DIR=${PWD}
+
+export ARCH=arm64
+export CROSS_COMPILE=$TX_BASE_DIR/toolchain/bin/aarch64-unknown-linux-gnu-
+export PLATFORM=blackbird
+export TEGRA_UBOOT_OUT=$TX_BASE_DIR/Linux_for_Tegra/bootloader/t186ref/$PLATFORM
+export ROOTFS_PATH=$TX_BASE_DIR/Linux_for_Tegra/rootfs
+export UBOOT_SOURCE=$TX_BASE_DIR/Linux_for_Tegra/sources/u-boot
+export CONFIG_NAME=blackbird_defconfig
+
+COMMAND="BUILD"
+
+#Parse the Inputs
+echo "Key: $1"
+
+while [[ $# > 0 ]]
+do
+key="$1"
+
+case $key in
+    -r|--rebuild)
+    COMMAND="REBUILD"
+    shift # past argument
+    ;;
+    -m|--menu)
+    COMMAND="MENU"
+    shift # past argument
+    ;;
+    *)
+    # unknown option
+    ;;
+esac
+shift
+done
+
+echo "Finished parsing inputs"
+
+cd $UBOOT_SOURCE
+
+if [ "$COMMAND" == "BUILD" ]; then
+  echo "Build"
+  make O=$TEGRA_UBOOT_OUT -j4
+fi
+if [ "$COMMAND" == "REBUILD" ]; then
+  echo "Re-Build"
+  make mrproper
+  make O=$TEGRA_UBOOT_OUT -j4 distclean
+  make O=$TEGRA_UBOOT_OUT -j4 $CONFIG_NAME
+  make O=$TEGRA_UBOOT_OUT -j4
+fi
+if [ "$COMMAND" == "MENU" ]; then
+  echo "Menu Config"
+  make O=$TEGRA_UBOOT_OUT -j4 menuconfig
+fi
+{% endhighlight %}
+
+Copy and paste this script into a file called 'build-uboot.sh' then change it's mode to execute.
+
+For the first run execute the script with the '--rebuild' flag in order to correctly configure the build tool.
+
+After a successful build you won't need to use the '--rebuild' command simply use 'build_uboot.sh' and it will build much faster
+
+{% highlight bash %}
+cd ~/Projects/nvidia_3.1
+echo "Normal Build"
+./build_uboot.sh
+{% endhighlight %}
+
+If you would like to use menuconfig to visually configure the build you can use the --menu flag
+
+{% highlight bash %}
+cd ~/Projects/nvidia_3.1
+echo "Normal Build"
+./build_uboot.sh --menu
+{% endhighlight %}
+
+![Blackbird Board in Menuconfig]({{ site.baseurl }}/assets/image/posts/tx2-bringup/uboot-menuconfig.png)
+
+
+# Kernel
+
+Configuring the kernel is less involved than u-boot. The main portions to configure are:
+
+  * Modify the device tree sources dts and dtsi files for our board
+  * Update the build tools so they understand our board
+  * Add a configuration header file for our board
+  * Incorporate our board into the build tools
+
+## Modify the Device Tree Sources
+
+Similar to the device tree source for u-boot the kernel's DTS describes the peripherals of the board. Unfortunately the DTS defined in the kernel and u-boot are not compatible so we need to go through the board adaptation process again.
+
+This is one of the big differences between the 24.1 driver package and the 28.1, specifically the dts files are seperated from the kernel code. The device trees are now located within a seperate folder called 'hardware'
+
+
+The DTS files are located within:
+
+Linux_for_Tegra/sources/hardware
+
+navigate to the dts files for the quill and copy the tegra186-quill-p3310-1000-c03-00-base.dts to tegra186-blackbird-p3310-1000-a00-00-base.dts
+
+
+{% highlight bash %}
+cd ~/Projects/nvidia_3.1/Linux_for_Tegra/sources/hardware/nvidia/platform/t18x/quill/kernel-dts/
+cp tegra186-quill-p3310-1000-c03-00-base.dts tegra186-blackbird-p3310-1000-a00-00-base.dts
+{% endhighlight %}
+
+
+
+The DTS file describes the hardware, an unmodified kernel can possibly boot multiple boards by using different dts files. In particular the Raspberry pi uses DTS files in order to boot the same kernel on the Raspberry Pi 1, Raspberry Pi 2, Raspberry Pi 3 as well as the Raspberry Pi Zero. The DTS allows users to.
+
+  * Modify how the hardware is conifgured on the board.
+  * Distinguish our boards from others by using a different board id.
+  * point to the correct pinmux dts include file.
+
+
+
+Change this
+
+<pre>
+	model = "quill";
+	compatible = "nvidia,quill", "nvidia,tegra186";
+</pre>
+
+To this
+
+<pre>
+	model="blackbird";
+	compatible="mit,blackbird", "nvidia,tegra186";
+</pre>
+
+Tell the build tools to build compile our new dts
+
+{% highlight bash %}
+cd ~/Projects/nvidia_3.1/Linux_for_Tegra/sources/hardware/nvidia/platform/t18x/quill/kernel-dts
+vim Makefile
+{% endhighlight %}
+
+Change this
+
+<pre>
+old-dtb := $(dtb-y)
+dtb-y :=
+makefile-path := platform/t18x/quill/kernel-dts
+
+dtb-$(CONFIG_ARCH_TEGRA_18x_SOC) += tegra186-quill-p3310-1000-a00-00-base.dtb
+dtb-$(CONFIG_ARCH_TEGRA_18x_SOC) += tegra186-quill-p3310-1000-a00-00-ape-cam.dtb
+dtb-$(CONFIG_ARCH_TEGRA_18x_SOC) += tegra186-quill-p3310-1000-a00-00-edp.dtb
+dtb-$(CONFIG_ARCH_TEGRA_18x_SOC) += tegra186-quill-p3310-1000-a00-00-dsi-hdmi-dp.dtb
+...
+
+</pre>
+
+To this
+
+<pre>
+old-dtb := $(dtb-y)
+dtb-y :=
+makefile-path := platform/t18x/quill/kernel-dts
+
+dtb-$(CONFIG_ARCH_TEGRA_18x_SOC) += tegra186-quill-p3310-1000-a00-00-base.dtb
+dtb-$(CONFIG_ARCH_TEGRA_18x_SOC) += tegra186-blackbird-p3310-1000-a00-00-base.dtb
+dtb-$(CONFIG_ARCH_TEGRA_18x_SOC) += tegra186-quill-p3310-1000-a00-00-ape-cam.dtb
+dtb-$(CONFIG_ARCH_TEGRA_18x_SOC) += tegra186-quill-p3310-1000-a00-00-edp.dtb
+dtb-$(CONFIG_ARCH_TEGRA_18x_SOC) += tegra186-quill-p3310-1000-a00-00-dsi-hdmi-dp.dtb
+...
+
+</pre>
+
+# Modify Flash Configuration Files
+
+The flash tools are configured to install the bootloader and kernel to the board, in order to adapt our board, we'll do the following
+
+  * Copy and modify existing extlinux.conf\* files to describe medium (sdmmc, usb, etc...) dependent boot configuration to the bootloader
+  * Copy and modify the medium independent flash configuration file
+  * Create a board configuration file
+
+
+
+
+
+## Adapt extlinux
+
+extlinux.conf.\* files configure how the bootloader loads up the kernel, it describes where the kernel is stored (emmc, SD Card, USB Stick, Network). It is possible for u-boot to present the user with multiple options when booting the kernel.
+
+Specifically the extlinux files describe:
+
+  * A menu title to help the user select options.
+  * The kernel command line arguments that will be fed into the kernel upon boot.
+  * Where the kernel is loaded on the medium.
+  * What device tree binary to load with the kernel.
+
+
+copy extlinux.conf.\* from p2771-0000 directory to blackbird's
+
+{% highlight bash %}
+cd ~/Projects/nvidia_3.1/Linux_for_Tegra/bootloader/t186ref
+cp p2771-0000/extlinux.conf.\* blackbird/
+{% endhighlight %}
+
+
+Modify the extlinux.conf.\* to decribe blackbird
+
+{% highlight bash %}
+grep -rIl "p2771-0000" | xargs sed -i "s/p2771-0000/Blackbird/g"
+{% endhighlight %}
+
+### MY OPINION: Kernel Configuration File Location
+
+After the first time I flash the TX2 I generally don't need to flash it again. Instead I remotely log into the TX2 and download new kernels and kernel configuration files into the /boot directory. This means that when I want to modify a driver or the configuration file for the kernel I don't need to wait a long time for the flash tool to download the entire image again. The process of updating is: rebuild the kernel and dtb then run a script on the TX2 to download the kernel and DTB, then put it in the /boot directory and reboot. The whole upgrade takes about 2 minutes or less.
+
+Unfortunately NVIDIA decided to change the way that extlinux.conf.\* works. Now instead of using the kernel configuration file within the filesystem it uses a DTB, I think, that resided in u-boot. You can change this behavior by adding a line to the appropriate extlinux.conf.\* file, specifically adding the following line:
+
+
+<pre>
+FDT /boot/tegra186-blackbird-p3310-1000-a00-00-base.dtb
+</pre>
+
+for example here is my extlinux.conf.emmc:
+
+<pre>
+TIMEOUT 30
+DEFAULT primary
+
+MENU TITLE Blackbird eMMC boot options
+
+LABEL primary
+      MENU LABEL primary kernel
+      LINUX /boot/Image
+			FDT /boot/tegra186-blackbird-p3310-1000-a00-00-base.dtb
+      APPEND fbcon=map:1 console=tty0 OS=l4t console=ttyS0,115200n8 memtype=0 video=tegrafb no_console_suspend=1 earlycon=uart8250,mmio32,0x03100000 gpt tegraid=18.1.2.0.0 tegra_keep_boot_clocks maxcpus=6 android.kerneltype=normal androidboot.serialno=0335115020673 vpr_resize root=/dev/mmcblk0p1 rw rootwait
+</pre>
+
+
+
+
+
+## Create a flash configuration file for the flash tool
+
+The flash tool needs to know how to write all of the files to the correct location on the TX2 module. To do this we copy the p2771-0000-devkit.conf and the p2771-0000.conf.common to a blackbird equivalent and then modify them.
+
+{% highlight bash %}
+cd ~/Projects/nvidia_3.1/Linux_for_Tegra
+cp p2771-0000-devkit.conf blackbird.conf
+cp p2771-0000.conf.common blackbird.conf.common
+{% endhighlight %}
+
+
+Change the file blackbird.conf is pointing to using the following command:
+
+{% highlight bash %}
+cd ~/Projects/nvidia_3.1/Linux_for_Tegra
+sed -i "s/p2771-0000.conf.common/blackbird.conf.common/g" blackbird.conf
+{% endhighlight %}
+
+Within the blackbird.conf.common file there are quite a few changes, mosty to remove the dependency on board eeprom versions. Replace the contents of the blackbird.conf with the following:
+
+
+<pre>
+
+# Copyright (c) 2015-2017, NVIDIA CORPORATION. All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+#  * Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+#  * Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#  * Neither the name of NVIDIA CORPORATION nor the names of its
+#    contributors may be used to endorse or promote products derived
+#    from this software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
+# EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+# PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+# PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
+# OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+sub_var_token()
+{
+	local var="$1";
+	local from="$2";
+	local to="$3";
+	if [ "${var}" != "" -a "${!var}" != "" ]; then
+		if [[ "${!var}" =~ "${from}" ]]; then
+			local val=`echo "${!var}" | sed -e s/${from}/${to}/`;
+			eval "${var}=${val}";
+		fi;
+	fi;
+}
+
+# Process fuse version:
+#
+# Production Fused BD vs non-fused BD::::::
+#
+# preboot_d15_dev_cr.bin vs. preboot_d15_prod_cr.bin
+# mce_mts_d15_dev_cr.bin vs. mce_mts_d15_prod_cr.bin
+# mb1_dev.bin            vs. mb1_prod.bin
+# mb1_recovery_dev.bin   vs. mb1_recovery_prod.bin
+#
+process_fuse_level()
+{
+	local fuselevel="${1}";
+	local srctoken="_dev";
+	local trgtoken="_prod";
+
+	# fuselevel:
+	#	"fuselevel_unknown"
+	#	"fuselevel_nofuse"
+	#	"fuselevel_production"
+	#
+	if [ "${fuselevel}" = "fuselevel_unknown" ]; then
+		return;
+	fi;
+	if [ "${fuselevel}" = "fuselevel_nofuse" ]; then
+		srctoken="_prod";
+		trgtoken="_dev";
+		sub_var_token "WB0BOOT" "warmboot.bin" "warmboot_dev.bin";
+	else
+		sub_var_token "WB0BOOT" "warmboot_dev.bin" "warmboot.bin";
+	fi;
+	sub_var_token "MTSPREBOOT" "${srctoken}" "${trgtoken}";
+	sub_var_token "MTS"        "${srctoken}" "${trgtoken}";
+	sub_var_token "MB1FILE"    "${srctoken}" "${trgtoken}";
+	sub_var_token "SOSFILE"    "${srctoken}" "${trgtoken}";
+}
+
+process_board_version()
+{
+	local board_id="${1}";
+	local board_version="${2}";
+	local bdv=${board_version^^};
+	local bid=${board_id^^};
+	#local uboot_build=500;
+	local uboot_build=;
+	local fromfab="-a00";
+	local tofab="-c03";		# default = C03
+	local pmicfab="-c03";		# default = C00
+	local bpfdtbfab="-c01";		# default = C00
+	local tbcdtbfab="-c03";		# default = C03
+	local kerndtbfab="-a00";	# default = C03
+	ODMDATA=0x1090000;		# default = C0X
+
+	#
+	# Board version is Alpah-Numeric value.
+	#
+	echo "Board ID(${board_id}) version(${board_version}) " >/dev/stderr;
+	if ! [[ "${bdv}" =~ ^[A-Z0-9][0-9][0-9]$ ]]; then
+		bdv="${DEFAULT_FAB:-Z99}";
+	fi;
+
+	sub_var_token "BPFDTB_FILE"    "${fromfab}" "${bpfdtbfab}";
+	sub_var_token "PINMUX_CONFIG"  "${fromfab}" "${tofab}";
+	sub_var_token "PMIC_CONFIG"    "${fromfab}" "${pmicfab}";
+	sub_var_token "PMC_CONFIG"     "${fromfab}" "${tofab}";
+	sub_var_token "PROD_CONFIG"    "${fromfab}" "${tofab}";
+	sub_var_token "BOOTROM_CONFIG" "${fromfab}" "${tofab}";
+	sub_var_token "TBCDTB_FILE"    "${fromfab}" "${tbcdtbfab}";
+	sub_var_token "DTB_FILE"       "${fromfab}" "${kerndtbfab}";
+
+	if [ "${USE_UBOOT}" -eq 1 ]; then
+		DFLT_KERNEL_IMAGE="bootloader/t186ref/blackbird/u-boot.bin";
+		#DFLT_KERNEL_IMAGE="bootloader/t186ref/p2771-0000/500/u-boot.bin";
+	fi;
+}
+
+# Common values and/or defaults across blackbird-0000*.conf:
+
+CHIPID=0x18;
+EMMC_CFG=flash_l4t_t186.xml;
+BOOTPARTSIZE=8388608;
+EMMCSIZE=31276924928;
+ITS_FILE=;
+#SYSBOOTFILE=p2771-0000/extlinux.conf;
+SYSBOOTFILE=blackbird/extlinux.conf;
+EMMC_BCT=P3310_A00_8GB_Samsung_8GB_lpddr4_204Mhz_A02_l4t.cfg
+#DTB_FILE=tegra186-quill-p3310-1000-c03-00-base.dtb;
+#TBCDTB_FILE=tegra186-quill-p3310-1000-c03-00-base.dtb;
+
+DTB_FILE=tegra186-blackbird-p3310-1000-a00-00-base.dtb;
+TBCDTB_FILE=tegra186-blackbird-p3310-1000-a00-00-base.dtb;
+
+
+
+
+# To configure whether to use U-Boot,
+# do either of the following before running flash.sh:
+# 1) Set environment variable USE_UBOOT to 0 or 1.
+# 2) Edit the line below to set USE_UBOOT to 0 or 1.
+if [ -z "${USE_UBOOT}" ]; then
+	USE_UBOOT=1;
+fi;
+ROOTFSSIZE=28GiB;
+CMDLINE_ADD="console=ttyS0,115200n8 console=tty0 OS=l4t fbcon=map:0 net.ifnames=0";
+target_board="t186ref";
+ROOT_DEV="mmcblk0p1 ------------ internal eMMC.
+        test ----------------- internal eMMC Test Kernel.
+        sda1 ----------------- external USB devices. (USB memory stick, HDD)
+        eth0 ----------------- nfsroot via RJ45 Ethernet port.
+        eth1 ----------------- nfsroot via USB Ethernet interface.";
+TEGRABOOT="bootloader/t186ref/nvtboot.bin";
+WB0BOOT="bootloader/t186ref/warmboot.bin";
+FLASHAPP="bootloader/tegraflash.py";
+FLASHER="bootloader/nvtboot_recovery_cpu.bin";
+BOOTLOADER="bootloader/nvtboot_cpu.bin";
+INITRD="bootloader/l4t_initrd.img";
+TBCFILE="bootloader/cboot.bin";
+BPFFILE="bootloader/bpmp.bin";
+TOSFILE="bootloader/tos.img";
+EKSFILE="bootloader/eks.img";
+MTSPREBOOT="bootloader/preboot_d15_prod_cr.bin";
+MTS="bootloader/mce_mts_d15_prod_cr.bin";
+MB1FILE="bootloader/mb1_prod.bin";
+SOSFILE="bootloader/mb1_recovery_prod.bin";
+MB2BLFILE="bootloader/nvtboot_recovery.bin";
+
+# BCT args:
+#
+BCT="--sdram_config";
+BINSARGS="--bins \"";
+DEV_PARAMS="emmc.cfg";
+SCR_CONFIG="minimal_scr.cfg";
+SCR_COLD_BOOT_CONFIG="mobile_scr.cfg";
+MISC_CONFIG="tegra186-mb1-bct-misc-si-l4t.cfg";
+PINMUX_CONFIG="tegra186-mb1-bct-pinmux-quill-p3310-1000-a00.cfg";
+PMIC_CONFIG="tegra186-mb1-bct-pmic-blackbird-p3310-1000-c03.cfg";
+#PMIC_CONFIG="tegra186-mb1-bct-pmic-quill-p3310-1000-c03.cfg";
+
+PMC_CONFIG="tegra186-mb1-bct-pad-quill-p3310-1000-a00.cfg";
+PROD_CONFIG="tegra186-mb1-bct-prod-quill-p3310-1000-a00.cfg";
+BOOTROM_CONFIG="tegra186-mb1-bct-bootrom-quill-p3310-1000-a00.cfg";
+
+# Default FAB: Force Blackbird boards without properly programmed EEPROM.
+# Values: C01->800, C02->900, C02->A00, C03->B00
+#
+DEFAULT_FAB="B01";
+
+</pre>
+
+
+
+
+# Convenient build scripts
+
+There is a lot of one time configuration that is required for porting a board but after all this heavy lifting is done the rest of the time you will be making small changes to the pin configuration, bootloader and kernel rebuilding and downloading.
+
+When I first started working with Linux for Tegra I would configure a terminal for bootloader builds, one for kernel builds and another for uploads. After a while I got lazy and wrote these scripts, I just recently updated them for TX2:
+
+[Helper Scripts](https://github.com/CospanDesign/l4t-helper-scripts)
+
+
+
