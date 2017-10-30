@@ -215,9 +215,9 @@ _edit: I have been successful in geneating macros using office libre_
 
 It's a little hard to see but on the left is the name of the pin and ball, there are columns describing the possible functions of the pins and the pins. As an example pin H1 names DAP1_DOUT can be configured in the following way:
 
-  * Left disconnected (unused)
-  * A GPIO called GPIO3_PB.02
-  * I2S Serial Data Out.
+* Left disconnected (unused)
+* A GPIO called GPIO3_PB.02
+* I2S Serial Data Out.
 
 All orange cells are customizable. You make your selecton under 'Customer Usage'
 
@@ -233,12 +233,15 @@ Using the big  spreadsheet will generate a dtsi file that will be read by the ke
 # Bootloader
 
 There are two stages of bootloading in the TX2:
-	* MLB: NVIDIA Specific bootloader, used to get the most basic parts of the chip up and running, once this is finished control is handed off to u-boot.
-	*	u-boot: Vendor independent bootloader, used to prepare to board to boot the kernel.
+
+* MLB: NVIDIA Specific bootloader, used to get the most basic parts of the chip up and running, once this is finished control is handed off to u-boot.
+*	u-boot: Vendor independent bootloader, used to prepare to board to boot the kernel.
 
 ## MLB
-	* Copy the current Quill configuration file found in:
-		*	Linux_for_Tegra/bootloader/t186ref/BCT/tegra186_mb1_bct_pmic_quill_p3310_1000_c04.cfg > Linux_for_Tegra/bootloader/t186ref/BCT/tegra186_mb1_bct_pmic_blackbird_p3310_1000_a00.cfg
+
+Copy the current Quill configuration file found in:
+
+*	Linux_for_Tegra/bootloader/t186ref/BCT/tegra186_mb1_bct_pmic_quill_p3310_1000_c04.cfg > Linux_for_Tegra/bootloader/t186ref/BCT/tegra186_mb1_bct_pmic_blackbird_p3310_1000_a00.cfg
 
 ## u-boot
 
@@ -246,11 +249,11 @@ u-boot is the tool that prepares the SOC for the kernel. In order to prepare it 
 
 At a high level we'll
 
-  * Create a configuration header file for our board, we would nornally call the u-boot pin mux configuration tool but since this is unavailable we will leave it up to the kernel to configure the pinmux.
-  * Create a Device Tree Source (DTS) to describe our hardware to u-boot. Modify the Makefile to recognize this DTS file.
-	* Create a default configuration (blackbird_defconfig) file for the Makefile.
-  * Add a board directory to expose board specific functions and configurations
-  * Modify Kconfig for the SOC to recognize our board
+* Create a configuration header file for our board, we would nornally call the u-boot pin mux configuration tool but since this is unavailable we will leave it up to the kernel to configure the pinmux.
+* Create a Device Tree Source (DTS) to describe our hardware to u-boot. Modify the Makefile to recognize this DTS file.
+* Create a default configuration (blackbird_defconfig) file for the Makefile.
+* Add a board directory to expose board specific functions and configurations
+* Modify Kconfig for the SOC to recognize our board
 
 ### Add a board configuration file (u-boot Configuration File)
 
@@ -431,6 +434,7 @@ mv p2771-0000.c blackbird.c
 ~~mv ../../../../../../pinmux-config-blackbird-2180.h .~~
 {% endhighlight %}
 
+{% highlight bash %}
 echo "use sed to replace the reference to the previous board pinmux with our board pinmux"
 grep -rIl 'pinmux-config-p2771-0000.h' | xargs sed -i 's/pinmux-config-p2771-0000.h/pinmux-config-blackbird2180.h/g'
 
