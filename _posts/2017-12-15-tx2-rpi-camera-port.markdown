@@ -16,7 +16,7 @@ The following are the steps I used to support multiple Raspberry Pi cameras on o
 
 
 ## Notes
-It's assumed the reader is familiar enough with the kernel buil process and has already download the Nvidia driver package. At the time of this writing the L4T 28.1 Production Release was used. As long as the changes to all future updates are minimal then these instructions shouldn't change much.
+It's assumed the reader is familiar enough with the kernel build process and has already download the Nvidia driver package. At the time of this writing the L4T 28.1 Production Release was used. As long as the changes to all future updates are minimal then these instructions shouldn't change much.
 
 If not you can follow the instructions here on how to get the drivers download:
 
