@@ -10,7 +10,8 @@ categories: Linux,TX2,Kernel,Driver
 First, I'm not an expert, I learned a lot by reading and hacking on this so there may be misunderstanding on my part and if you find something that I did wrong please let me know. I've got a few requests on how to bring up the Rapsberry Pi camera on the TX1/TX2 and I want to help you out. So here how I did it.
 
 ## Obligatory Intro
-The TX2 can interface with the Raspberry PI cameras, openening up the possibility for low cost camera applications. Unfortunately there are very few boards that have Raspberry Pi Camera connectors. Auvidea is the only company that comes to mind.
+Configuring the TX2 to interface with Raspberry PI cameras opens up the possiblity for low cost camera applications.
+ Unfortunately there are very few boards that have Raspberry Pi Camera connectors. Auvidea is the only company that comes to mind.
 
 The following are the steps I used to support multiple Raspberry Pi cameras on one board.
 
@@ -985,7 +986,7 @@ Now rebuild the kernel and it should have the correct drivers.
 
 # Userland Tests
 
-After everything is built and burned onto a TX2 boot up the kernel. You should have three new /dev/videoX entries.
+After everything is built and burned onto a TX2 and boot up the kernel. You should have three new /dev/videoX entries.
 
 You can run the following command to capture a short video clip:
 
