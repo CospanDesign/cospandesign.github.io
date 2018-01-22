@@ -454,7 +454,7 @@ There are a lot of ways to boot the kernel. One way I perfer is to use 'sysboot'
 
 the Sysboot will do all the rest of the work.
 
-To accomplish this we will need to rebuild uboot with the 'pxe' option enabled. To do this build uboot with the '-m' option which will start the 'menu' configuration tool.
+To accomplish this we will need to rebuild uboot with the 'DISTRO_DEFAULTS' option enabled. To do this build uboot with the '-m' option which will start the 'menu' configuration tool.
 
 
 {% highlight.bash %}
@@ -469,14 +469,15 @@ You will see this screen
 Type the following
 
 {% highlight.bash %}
-/pxe
+/disto_defaults
 {% endhighlight %}
 
-You will see a search result with one output. Press '1' and then space to enable 'pxe'
+You will see a search result with one output. Press '1' and then space to enable 'distro_defaults'
 
 Your screen should look like this
 
-![UBoot PXE Enable]({{ site.baseurl }}/assets/image/posts/snickerdoodle/uboot_pxe_enable.png)
+![UBoot Distro Defaults Enable]({{ site.baseurl }}/assets/image/posts/snickerdoodle/uboot_distro_defaults.png)
+
 
 Press the right arrow button to get over 'Exit' and keep selecting 'Exit' until it asks you to save the configuration file. Say 'Yes'
 
